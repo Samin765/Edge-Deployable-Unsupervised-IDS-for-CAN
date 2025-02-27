@@ -59,7 +59,7 @@ def plot_loss_curve(epoch_losses, val_losses, epochs, latent_dim, time,n_rows_tr
         os.remove(plot_path)
     else:
         plot_name = "VAE_MS"
-        plot_path = f"/Users/SCHUGD/Desktop/MasterThesis/Code/Plots/{plot_name}_LD{latent_dim}_EP{epochs}_NT{n_rows_train}_{time}.png"
+        plot_path = f"./Resources/Plots/{plot_name}_LD{latent_dim}_EP{epochs}_NT{n_rows_train}_{time}.png"
         plt.savefig(plot_path)
 
     # Show
@@ -95,7 +95,7 @@ def get_confusion_matrix(true_labels, predicted, latent_dim , epochs,time, n_row
         os.remove(plot_path)
     else:
         plot_name ="Conf_VAE_MS"
-        plot_name = f"/Users/SCHUGD/Desktop/MasterThesis/Code/Plots/{plot_name}_LD{latent_dim}_EP{epochs}_NT{n_rows_train}_{time}.png"
+        plot_name = f"./Resources/Plots/{plot_name}_LD{latent_dim}_EP{epochs}_NT{n_rows_train}_{time}.png"
         plt.savefig(plot_name)
     
     plt.show()
@@ -228,7 +228,7 @@ def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,ga
                 print(f"Plot saved to S3: s3://{BUCKET}/{s3_key}")
         else:
             plot_name ="Latent_Space"
-            plot_name = f"/Users/SCHUGD/Desktop/MasterThesis/Code/Plots/{name}_{plot_name}_EPOCH{epoch}_LD{latent_dim}_Beta{beta}_n_critic{n_critic}_gamma{gamma}_time{time}.png"
+            plot_name = f"./Resources/Plots/{name}_{plot_name}_EPOCH{epoch}_LD{latent_dim}_Beta{beta}_n_critic{n_critic}_gamma{gamma}_time{time}.png"
             plt.savefig(plot_name)
 
     plt.show()

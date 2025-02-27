@@ -141,7 +141,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, recons
         predicted = results_df['Anomaly'].astype(int)
         true_labels = results_df['True_Label'].astype(int)
 
-        excel_file_path = f'/Users/SCHUGD/Desktop/MasterThesis/Code/model_results2.xlsx'
+        excel_file_path = f'./Resources/model_results2.xlsx'
         conf_matrix = confusion_matrix(true_labels, predicted)
 
         # Print results to console
@@ -178,7 +178,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, recons
         predicted = distances_df['Anomaly'].astype(int)
         true_labels = distances_df['True_Label'].astype(int)
 
-        excel_file_path = f'/Users/SCHUGD/Desktop/MasterThesis/Code/model_results2.xlsx'
+        excel_file_path = f'./Resources/model_results2.xlsx'
 
         #save_results_to_excel(model_name, true_labels, predicted, excel_file_path)
         get_confusion_matrix(true_labels, predicted, latent_dim, epochs, time, n_rows_train, AWS, s3, BUCKET)
