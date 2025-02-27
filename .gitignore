@@ -1,16 +1,38 @@
-# Ignore all .log files
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pdb
+
+# Virtual environments
+venv/
+.env/
+*.env
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Logs
 *.log
 
-# Ignore node_modules folder
+# IDEs
+.vscode/
+.idea/
+
+# Node.js (if applicable)
 node_modules/
 
-# Ignore all files in the temp folder
-temp/
+# Docker
+*.log
+.dockerignore
 
-# Ignore all .env files
-.env
+# Miscellaneous
+*.bak
+*.swp
 
-# Ignore any files named "test.txt"
-test.txt
-
-*.pyc
+# Coverage
+.coverage/
+*.cover
