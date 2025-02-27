@@ -1,0 +1,16 @@
+# Ignore all .log files
+*.log
+
+# Ignore node_modules folder
+node_modules/
+
+# Ignore all files in the temp folder
+temp/
+
+# Ignore all .env files
+.env
+
+# Ignore any files named "test.txt"
+test.txt
+
+*.pyc
