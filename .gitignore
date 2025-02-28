@@ -42,3 +42,14 @@ node_modules/
 *.txt
 *.asc
 *.npz
+
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
