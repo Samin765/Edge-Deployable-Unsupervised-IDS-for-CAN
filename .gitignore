@@ -36,3 +36,9 @@ node_modules/
 # Coverage
 .coverage/
 *.cover
+
+# Ignore CSV, TXT, ASC, and NPZ files
+*.csv
+*.txt
+*.asc
+*.npz
