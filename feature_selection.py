@@ -184,23 +184,95 @@ def compute_temporal_features_tsfresh(dataframe, custom_fc_parameters = None, ts
 def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows = None, ts_fresh = False, ts_fresh_parameters = None, ts_fresh_custom_features = None):
     column_names_train = ['timestamp' , 'arbitration_id' , 'channel' , 'dlc', 'data' , 'ecu']
     column_names_test = ['timestamp', 'arbitration_id', 'dlc', 'data']
-    if phase =='training':
-        #dataframe = pd.read_csv(file_name, parse_dates=['timestamp'], header =0, names=column_names_train, nrows = rows)
-        dataframe = pd.read_csv(file_name, header=0, names=column_names_train, nrows=rows, dtype={'timestamp': float})
-    elif phase == 'debug':
-        #print("check")
-        dataframe = pre_dataframe  
-    elif phase == 'test':
-        #dataframe = pd.read_csv(file_name, parse_dates=['timestamp'], header =0, names=column_names_test + ['type'], nrows= rows)
-        dataframe = pd.read_csv(file_name, header=0, names=column_names_test + ['type'], nrows=rows, dtype={'arbitration_id': int})
-        # one hot encode type
-        dataframe['type'] = dataframe['type'].apply(lambda x: 0 if x == 'R' else 1)
-        # Print the count of 1s in the 'type' column
-        count_of_ones = dataframe['type'].sum()
-        print(f"Anomalies in 'type' column: {count_of_ones}")
-    else:        
-        print("invalid phase")
+    # Define consistent dtypes for all phases
+    # First check original file data types (read a few rows)
+    print(f"Checking original data types in {file_name}...")
+    try:
+        sample_df = pd.read_csv(file_name, nrows=1)
+        print("Original inferred data types:")
+        for col in sample_df.columns:
+            print(f"  {col}: {sample_df[col].dtype}")
+
+        # To see the actual value format
+        print("\nSample values for each column:")
+        for col in sample_df.columns:
+            print(f"  {col}: {sample_df[col].iloc[0]} (type: {type(sample_df[col].iloc[0]).__name__})")
+    except Exception as e:
+        print(f"Error sampling file: {e}")
+
+    dtypes_train = {
+        'timestamp': float,
+        'arbitration_id': int,
+        'channel': int,
+        'dlc': int,
+        'data': str,
+        'ecu': str
+
+    }
+
+    dtypes_test = {
+        'timestamp': float,
+        'arbitration_id': int,
+        'dlc': int,
+        'data': str,
+        'type': str
+    }
+
+    try:
+        if phase == 'training':
+            dataframe = pd.read_csv(
+                file_name, 
+                header=0, 
+                names=column_names_train, 
+                nrows=rows, 
+                dtype=dtypes_train
+            )
+            
+        elif phase == 'debug':
+            dataframe = pre_dataframe
+            
+        elif phase == 'test':
+            # Read the CSV with consistent dtypes
+            dataframe = pd.read_csv(
+                file_name, 
+                header=0, 
+                names=column_names_test + ['type'], 
+                nrows=rows, 
+                dtype=dtypes_test
+            )
+            
+            # Explicitly convert arbitration_id to integers
+            # First handle any potential NaN values
+            dataframe['arbitration_id'] = dataframe['arbitration_id'].fillna(0)
+            
+            # Then convert to integers
+            dataframe['arbitration_id'] = dataframe['arbitration_id'].astype(int)
+
+            # Create a copy before modifying to avoid SettingWithCopyWarning
+            dataframe = dataframe.copy()
+            
+            # Count types before processing for debugging
+            print(f"Raw type values: {dataframe['type'].unique()}")
+            
+            # Replace missing values with a consistent value before conversion
+            dataframe['type'] = dataframe['type'].fillna('unknown')
+            
+            # Explicitly convert only 'R' to 0 and everything else to 1
+            dataframe['type'] = dataframe['type'].apply(lambda x: 0 if x == 'R' else 1)
+            
+            # Print the count of anomalies
+            count_of_ones = dataframe['type'].sum()
+            print(f"Anomalies in 'type' column: {count_of_ones}")
+            
+        else:
+            print("Invalid phase")
+            return None
+            
+        
+    except Exception as e:
+        print(f"Error processing data: {e}")
         return None
+    
     scaler = MinMaxScaler()
 
     #print(dataframe.head(2))
