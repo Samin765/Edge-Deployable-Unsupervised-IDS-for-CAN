@@ -14,6 +14,7 @@ from openpyxl import Workbook
 import tempfile  # To create a temporary file
 import os
 
+
 def save_trained_model(vae, optimizer, model_path,model_name = "", latent_dim = "", beta = "", n_rows_train = "", time = "", AWS = False, s3 = None, BUCKET = ""):
     if AWS:
         s3_key = f'Models/BEST_{model_name}_LD{latent_dim}_Beta{beta}_NT{n_rows_train}_{time}.keras'
@@ -371,4 +372,41 @@ def save_results_to_excel(model_name, true_labels, predicted_labels, excel_file_
     #workbook.save(excel_file_path)
     print(f"✅ Results saved to sheet '{model_name}' in {excel_file_path}")
 
+def get_s3_client(REGION = 'eu-west-1',BUCKET = 'ml-can-ids-logs', print_files = True):
+    import boto3
+    
+    s3 = boto3.client('s3', region_name= REGION)
+    client = boto3.client("sagemaker")
+    response = client.describe_notebook_instance(NotebookInstanceName="MLCANIDS")
+    print(response["InstanceType"])
+    # List objects in the bucket
+    response = s3.list_objects_v2(Bucket= BUCKET)
 
+    # Print the file names in the bucket
+    if print_files:
+        for obj in response.get('Contents', []):
+            print(obj['Key'])
+    
+    return s3
+
+
+def check_dataset(dataset, dataset_name="Dataset"):
+    all_values = []
+    
+    for batch in dataset:
+        # Convert TensorFlow tensors to NumPy
+        batch_np = batch.numpy() if isinstance(batch, tf.Tensor) else np.array(batch)
+        
+        # Flatten batch and store values
+        all_values.extend(batch_np.flatten())
+    
+    # Perform checks
+    has_nan = np.isnan(all_values).any()
+    has_out_of_bounds = (np.array(all_values) < 0).any() or (np.array(all_values) > 1).any()
+    all_values = [lst if isinstance(lst, (list, np.ndarray)) else [lst] for lst in all_values]
+    all_same_size = all(len(lst) == len(all_values[0]) for lst in all_values)
+    # Final condition combining both checks
+    if not all_same_size:
+        print("Error: Lists have different sizes.")
+    print(f"{dataset_name} - Contains NaN: {has_nan}")
+    print(f"{dataset_name} - Contains values <0 or >1: {has_out_of_bounds}")
