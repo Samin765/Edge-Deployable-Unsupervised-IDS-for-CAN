@@ -94,9 +94,11 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
 
 
 
-            gradients = tape.gradient(loss, vae.encoder.trainable_variables + vae.decoder.trainable_variables)
+            gradients = tape.gradient(loss, vae.encoder.trainable_variables + vae.decoder.trainable_variables 
+                                      + vae.fc_mu.trainable_variables + vae.fc_logvar.trainable_variables)
             gradients, _ = tf.clip_by_global_norm(gradients, 1.0)
-            optimizer.apply_gradients(zip(gradients, vae.encoder.trainable_variables + vae.decoder.trainable_variables))
+            optimizer.apply_gradients(zip(gradients, vae.encoder.trainable_variables + vae.decoder.trainable_variables 
+                                          + vae.fc_mu.trainable_variables + vae.fc_logvar.trainable_variables))
 
             epoch_loss += loss.numpy()
             #epoch_beta_tc_loss += b_tcvae_loss.numpy()
