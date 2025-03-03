@@ -218,7 +218,7 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
         #vae.compile(optimizer = optimizer)
         #vae.save(model_path)
         if epoch % 10 == 0 and epoch > 0:
-            save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
+            save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
             print( f'💽Saved Model at Epoch {epoch+1}💽')
 
     #Save the trained model
