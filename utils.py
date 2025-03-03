@@ -15,7 +15,7 @@ import tempfile  # To create a temporary file
 import os
 
 
-def save_trained_model(vae, optimizer, model_path,model_name = "", latent_dim = "", beta = "", n_rows_train = "", time = "", AWS = False, s3 = None, BUCKET = ""):
+def save_trained_model(vae, optimizer, model_path,model_name = "", latent_dim = "", beta = "", n_rows_train = "", time = "",epochs = 0, AWS = False, s3 = None, BUCKET = ""):
     if AWS:
         s3_key = f'Models/BEST_{model_name}_LD{latent_dim}_Beta{beta}_NT{n_rows_train}_{time}.keras'
         vae.compile(optimizer = optimizer)
@@ -24,7 +24,7 @@ def save_trained_model(vae, optimizer, model_path,model_name = "", latent_dim = 
         s3.upload_file("vae_model.keras", BUCKET, s3_key)
         print(f"Model saved to S3: s3://{BUCKET}/{s3_key}")
     else:
-        model_path = f"./Resources/Models/{model_name}_LD{latent_dim}_EP{beta}_NT{n_rows_train}_{time}.keras"
+        model_path = f"./Resources/Models/{model_name}_EPOCHS:{epochs}_LD{latent_dim}_EP{beta}_NT{n_rows_train}_{time}.keras"
         vae.compile(optimizer = optimizer)
         vae.save(model_path)
     
