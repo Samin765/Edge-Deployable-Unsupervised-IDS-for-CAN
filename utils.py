@@ -24,6 +24,7 @@ def save_trained_model(vae, optimizer, model_path,model_name = "", latent_dim = 
         s3.upload_file("vae_model.keras", BUCKET, s3_key)
         print(f"Model saved to S3: s3://{BUCKET}/{s3_key}")
     else:
+        model_path = f"./Resources/Models/{model_name}_LD{latent_dim}_EP{beta}_NT{n_rows_train}_{time}.keras"
         vae.compile(optimizer = optimizer)
         vae.save(model_path)
     
