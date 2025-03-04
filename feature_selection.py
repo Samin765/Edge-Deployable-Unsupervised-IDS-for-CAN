@@ -321,8 +321,8 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
     else:
         dataframe['features'] = dataframe.apply(
         lambda row: np.concatenate(
-            [row[[f'bit_{i}' for i in range(num_bits)]].values,  # Binary data columns
-            row[data_columns].values,  # Other data columns
+            [row[[f'bit_{i}' for i in range(num_bits)]].values,  # Binary data columns 0 to 28
+            row[data_columns].values,  # Other data columns 28 to 36
             np.array([row['msg_frequency'], row['iat'],row['payload_entropy'],row['hamming_distance'],row['timestamp']])  # Additional features
             ]), axis=1)
 

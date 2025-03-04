@@ -221,8 +221,8 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
             save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
             print( f'💽Saved Model at Epoch {epoch+1}💽')
 
-    #Save the trained model
-    #vae.save(model_path)
+    save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
+    print( f'💽Saved Model at Epoch {epoch+1}💽')
 
     print("💽Loss Plot Saved.💽")
     print("💽VAE model saved.💽")
