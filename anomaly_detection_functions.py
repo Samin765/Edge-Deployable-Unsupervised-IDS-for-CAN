@@ -30,17 +30,30 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset,reconstructi
         reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
 
         if reconstruction_AD:
-            # Compute VAE loss
-            reconstruction_errors = tf.reduce_mean(
-                tf.square(tf.expand_dims(batch, axis=0) - reconstructed), axis = -1
+            expanded_batch = tf.expand_dims(batch, axis = 0)
+            binary_features = 37
+
+            # Extract features
+            batch_binary = expanded_batch[..., :binary_features]
+            reconstructed_binary = reconstructed[..., :binary_features]
+            batch_continuous = expanded_batch[..., binary_features:]
+            reconstructed_continuous = reconstructed[..., binary_features:]
+            # BCE loss for binary features
+            bce_errors = tf.keras.losses.BinaryCrossentropy(reduction='none')(
+                batch_binary, reconstructed_binary)
+            
+            # MSE loss for continous features
+            mse_errors = tf.reduce_mean(
+                tf.square(batch_continuous - reconstructed_continuous), axis = -1
             )  # Shape: (n_samples, batch_size, window_size)  
 
+            reconstruction_errors = bce_errors + mse_errors
             # mean over samples and window_size
             mean_reconstruction_error = tf.reduce_mean(reconstruction_errors, axis=(2, 0))
             #max_reconstruction_error = tf.reduce_max(reconstruction_errors, axis=(2, 0))
 
         batch_data = batch.numpy()  
-        for i in range(len(batch)):
+        for i in range(len(batch_data)):
             if reconstruction_AD: 
                 reconstruction_errors_threshold.append(mean_reconstruction_error[i])
             if latent_AD:
@@ -58,10 +71,11 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset,reconstructi
 
     if reconstruction_AD:
         #reconsutrction_normal_threshold = np.mean(reconstruction_errors_threshold) + np.percentile(reconstruction_errors_threshold, (1 - 0.5))
-        reconsutrction_normal_threshold = np.percentile(reconstruction_errors_threshold, 99.5)
+        #reconsutrction_normal_threshold = np.percentile(reconstruction_errors_threshold, 99.5)
+        reconsutrction_normal_threshold = np.percentile(reconstruction_errors_threshold, 0.001)
         print(f"Normal Reconstruction threshold: {reconsutrction_normal_threshold:.7f}")
     
-    return reconsutrction_normal_threshold, latent_normal_threshold, mean_train, variance_train
+    return reconsutrction_normal_threshold, latent_normal_threshold, mean_train, variance_train, load_vae
 
 
 def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_train, variance_train, debug = False):
@@ -83,35 +97,49 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
         # Compute reconstruction errors (mean over all features)
         if reconstruction_AD:
             #print(batch.shape)
-            errors = tf.reduce_mean(tf.square(tf.expand_dims(batch, axis=0) - reconstructed), axis=-1)  # Shape: (n_samples, batch_size)
 
+            expanded_batch = tf.expand_dims(batch, axis = 0)
+            binary_features = 37
+
+            # Extract features
+            batch_binary = expanded_batch[..., :binary_features]
+            reconstructed_binary = reconstructed[..., :binary_features]
+            batch_continuous = expanded_batch[..., binary_features:]
+            reconstructed_continuous = reconstructed[..., binary_features:]
+            # BCE loss for binary features
+            bce_errors = tf.keras.losses.BinaryCrossentropy(reduction='none')(
+                batch_binary, reconstructed_binary)
+
+            mse_errors = tf.reduce_mean(tf.square(batch_continuous - reconstructed_continuous), axis=-1)  # Shape: (n_samples, batch_size)
+            
+            errors = bce_errors + mse_errors
             # Compute mean reconstruction error across samples (axis=0) and features (axis=-1)
             mean_reconstruction_error = tf.reduce_mean(errors, axis=(0, 2))  # Shape: (batch_size,)
             #mean_reconstruction_error = tf.reduce_max(errors, axis=(0, 2))  # Shape: (batch_size,)
-            #print(mean_reconstruction_error.shape)
+
             reconstruction_losses.extend(mean_reconstruction_error)
 
         batch_data = batch.numpy()  # Convert Tensor to NumPy
         for i in range(len(batch_data)):
             if reconstruction_AD:
                 results.append(np.append(label[i], reconstruction_losses[i].numpy().item()))  # Store the label and max error per sample
-                #if label[i] == 0 and debug < 10:
-                #    print("Normal reconstruction: ", reconstruction_losses[i].numpy().item())
-                #    debug +=1  
-                #if label[i] == 1 and debug < 200:
-                #    print("Attack reconstruction: ", reconstruction_losses[i].numpy().item())
-                #    debug +=1 
+                if label[i] == 0 and debug < 1000:
+                    print("Normal reconstruction: ", reconstruction_losses[i].numpy().item())
+                    debug +=1  
+                if label[i] == 1 and debug < 2000:
+                    print("Attack reconstruction: ", reconstruction_losses[i].numpy().item())
+                    debug +=1 
             if latent_AD:
                 distance = bhattacharyya_distance(mean_train, variance_train, mu[i], logvar[i])
                 #print("mu" , len(mu))
                 #print("mu" , len(logvar))
                 distances.append(np.append(label[i], distance))
-                #if label[i] == 0 and debug < 20:
-                #    print("Normal Latent ", distance)
-                #    debug +=1 
-                #if label[i] == 1 and debug < 40:
-                #    print("Attack latent: ", distance)
-                #    debug +=1
+                if label[i] == 0 and debug < 20:
+                    print("Normal Latent ", distance)
+                    debug +=1 
+                if label[i] == 1 and debug < 40:
+                    print("Attack latent: ", distance)
+                    debug +=1
     return results, distances
  
 

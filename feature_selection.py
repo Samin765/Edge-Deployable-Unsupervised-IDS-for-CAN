@@ -127,6 +127,7 @@ def compute_temporal_features_tsfresh(dataframe, custom_fc_parameters = None, ts
 
     # Initialize the result array
     msg_count_last_20ms = np.zeros(len(dataframe), dtype=int)
+    payload_entropy_last_20ms = np.zeros(len(dataframe), dtype=int)
 
     # Define the window size in seconds (50 milliseconds = 0.050 seconds)
 
@@ -139,6 +140,7 @@ def compute_temporal_features_tsfresh(dataframe, custom_fc_parameters = None, ts
 
     # Add the result to the dataframe
     dataframe["msg_frequency"] = msg_count_last_20ms
+
 
     # Normalize msg_count_last_50ms to [0, 1]
     max_count = dataframe["msg_frequency"].max()

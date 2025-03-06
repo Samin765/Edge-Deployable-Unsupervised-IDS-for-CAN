@@ -36,11 +36,26 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
             # Train VAE
             with tf.GradientTape() as tape:
                 reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+                
+                expanded_batch = tf.expand_dims(batch, axis = 0)
+                binary_features = 37
 
-                #Compute reconstruction MSE error for each sample
-                reconstruction_errors = tf.reduce_mean(
-                    tf.square(tf.expand_dims(batch, axis=0) - reconstructed), axis=-1
+                # Extract features
+                batch_binary = expanded_batch[..., :binary_features]
+                reconstructed_binary = reconstructed[..., :binary_features]
+                batch_continuous = expanded_batch[..., binary_features:]
+                reconstructed_continuous = reconstructed[..., binary_features:]
+
+                # BCE loss for binary features
+                bce_errors = tf.keras.losses.BinaryCrossentropy(reduction='none')(
+                    batch_binary, reconstructed_binary)
+
+                #Compute reconstruction MSE error for continous features
+                mse_errors = tf.reduce_mean(
+                    tf.square(batch_continuous - reconstructed_continuous), axis=-1
                 )  # Shape: (n_samples, batch_size, window_size)
+
+                reconstruction_errors = bce_errors + mse_errors
 
                 # Aggregate errors (mean over samples and window_size)
                 mean_reconstruction_error = tf.reduce_mean(reconstruction_errors, axis=(2, 0))
