@@ -31,7 +31,7 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset,reconstructi
 
         if reconstruction_AD:
             expanded_batch = tf.expand_dims(batch, axis = 0)
-            binary_features = 37
+            binary_features = 29
 
             # Extract features
             batch_binary = expanded_batch[..., :binary_features]
@@ -99,7 +99,7 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
             #print(batch.shape)
 
             expanded_batch = tf.expand_dims(batch, axis = 0)
-            binary_features = 37
+            binary_features = 29
 
             # Extract features
             batch_binary = expanded_batch[..., :binary_features]
@@ -275,3 +275,18 @@ def bhattacharyya_distance_old(mu_normals, logvar_normals, mu_anomaly, logvar_an
 
     distances = term1 + term2
     return np.min(distances)  
+
+
+def gaussian_distance(mean1, var1, mean2, var2):
+    """
+    Calculate Wasserstein-2 distance between Gaussians
+    (Simplified for diagonal covariance matrices)
+    """
+    # Mean term
+    mean_diff = np.sum((mean1 - mean2)**2)
+    
+    # Variance term (for diagonal covariance)
+    var_diff = np.sum((np.sqrt(var1) - np.sqrt(var2))**2)
+    
+    return np.sqrt(mean_diff + var_diff)
+

@@ -1,4 +1,5 @@
 from matplotlib.pylab import plt
+from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, classification_report
@@ -199,8 +200,21 @@ def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,ga
     plt.figure(figsize=(10, 8))
 
     if labels is not None:
-        scatter = plt.scatter(latent_2d[:, 0], latent_2d[:, 1], c=labels, cmap='tab10', alpha=0.3)
-        plt.legend(*scatter.legend_elements(), title="Labels")
+        #scatter = plt.scatter(latent_2d[:, 0], latent_2d[:, 1], c=labels, cmap='tab10', alpha=0.3)
+        #plt.legend(*scatter.legend_elements(), title="Labels")
+
+        # Create a custom colormap with blue for normal (0) and red for attack (1)
+        colors = ['blue' if label == 0 else 'red' for label in labels]
+        
+        # Use the colors directly in the scatter plot
+        plt.scatter(latent_2d[:, 0], latent_2d[:, 1], c=colors, alpha=0.3)
+        
+        # Create custom legend
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', markersize=10, label='Normal (0)'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Attack (1)')
+        ]
+        plt.legend(handles=legend_elements, title="Labels")
     else:
         plt.scatter(latent_2d[:, 0], latent_2d[:, 1], color='blue', alpha=0.5, label="Unlabeled (Train)")
 

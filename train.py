@@ -38,7 +38,7 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
                 reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
                 
                 expanded_batch = tf.expand_dims(batch, axis = 0)
-                binary_features = 37
+                binary_features = 29
 
                 # Extract features
                 batch_binary = expanded_batch[..., :binary_features]
@@ -131,7 +131,7 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
                     break
         
         # Save the trained model each 10th epoch
-        if epoch % 10 == 0 and epoch > 0:
+        if epoch % 50 == 0 and epoch > 0:
             save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
             print( f'💽Saved Model at Epoch {epoch+1}💽')
 
@@ -308,7 +308,7 @@ def train_model_factor(vae,optimizer,discriminator_optimizer, epochs, n_samples,
                     break
         
         # Save the trained model
-        if epoch % 10 == 0 and epoch > 0:
+        if epoch % 50 == 0 and epoch > 0:
             save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
             print( f'💽Saved Model at Epoch {epoch+1}💽')
 
@@ -388,7 +388,7 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
                                           + vae.fc_mu.trainable_variables + vae.fc_logvar.trainable_variables))
 
             epoch_loss += loss.numpy()
- 
+            epoch_beta_tc_loss += b_tcvae_loss.numpy()
         # VALIDATION
         epoch_val_loss = 0
         show_val = validation_method in ["B_VAE","B_TCVAE"]
@@ -411,6 +411,7 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
 
                     val_loss = reconstruction_loss + beta * kl_divergence
                     epoch_val_loss += val_loss.numpy()
+
                 elif validation_method == "B_TCVAE":
                     reconstruction_errors = tf.reduce_mean(
                         tf.square(tf.expand_dims(batch, axis=0) - reconstructed), axis=-1
@@ -431,7 +432,6 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
         if validation_method == "PLOT" and epoch % 50 == 0 and epoch > 0:
             print("PLOT AT EPOCH: ", {epoch + 1})
             get_latent_representations_label(vae, test_dataset, latent_dim, beta,n_critic,gamma,time,epoch = epoch, name = model_name,type = 'TSNE', save = False, AWS = AWS, s3 = s3, BUCKET = BUCKET)
-
 
         # Store the loss for this epoch
         train_loss = epoch_loss / len(train_dataset)
@@ -463,7 +463,7 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
         # Save the trained model
         #vae.compile(optimizer = optimizer)
         #vae.save(model_path)
-        if epoch % 10 == 0 and epoch > 0:
+        if epoch % 50 == 0 and epoch > 0:
             save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
             print( f'💽Saved Model at Epoch {epoch+1}💽')
 
