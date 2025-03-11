@@ -89,7 +89,7 @@ def compute_hamming_distances(dataframe, scaler, previous_x=1):
     return dataframe
 
 
-def compute_temporal_features_tsfresh(dataframe, custom_fc_parameters = None, ts_fresh = False):
+def compute_temporal_features(dataframe, custom_fc_parameters = None, ts_fresh = False):
     """
     Computes tsfresh features while preserving message-level granularity.
     
@@ -113,77 +113,128 @@ def compute_temporal_features_tsfresh(dataframe, custom_fc_parameters = None, ts
         print(f"Found {dataframe['timestamp'].isna().sum()} NaT values in timestamp. Rows: {dataframe[dataframe['timestamp'].isna()]}")
 
     # Compute Inter-Arrival Time (IAT)
-    dataframe["iat"] = dataframe.groupby("arbitration_id")["timestamp"].diff().fillna(0)
+   #dataframe["iat"] = dataframe.groupby("arbitration_id")["timestamp"].diff().fillna(0)
 
     # Check for NaN values in 'iat' and handle
-    if dataframe["iat"].isna().sum() > 0:
-        print("NaN values found in 'iat' column")
-        dataframe["iat"] = dataframe["iat"].fillna(0)  # Replace NaNs with 0 or other logic
+   #if dataframe["iat"].isna().sum() > 0:
+   #    print("NaN values found in 'iat' column")
+   #   dataframe["iat"] = dataframe["iat"].fillna(0)  # Replace NaNs with 0 or other logic
 
     # Compute Rolling Window Statistics per message
     window_size_seconds = 0.2 # interval between log 1 and 50 is approx 0.18seconds
     timestamps = dataframe["timestamp"].to_numpy()
     arbitration_ids = dataframe["arbitration_id"].to_numpy()
+    payloads = dataframe['data'].to_numpy()
 
     # Initialize the result array
     msg_count_last_20ms = np.zeros(len(dataframe), dtype=int)
     payload_entropy_last_20ms = np.zeros(len(dataframe), dtype=int)
-
+    byte_change_rates = np.zeros((len(dataframe), 8), dtype=float)
+    payload_change_rate = np.zeros(len(dataframe), dtype=float)
     # Define the window size in seconds (50 milliseconds = 0.050 seconds)
 
     # Iterate through each row and compute the count
-    for i, (current_time, current_id) in enumerate(zip(timestamps, arbitration_ids)):
+    for i, (current_time, current_id, current_payload) in enumerate(zip(timestamps, arbitration_ids, payloads)):
         mask = (timestamps >= current_time - window_size_seconds) & \
             (timestamps <= current_time) & \
             (arbitration_ids == current_id)
         msg_count_last_20ms[i] = np.sum(mask)
 
+        window_indices = np.where(mask)[0]
+    
+        # Skip entropy calculation if only one message in window
+        if len(window_indices) > 1:
+            # Calculate entropy for each payload in window
+            window_entropies = []
+            for idx in window_indices:
+                payload_bytes = [dataframe.iloc[idx][f'data[{j}]'] for j in range(8)]
+                counts = np.bincount(payload_bytes, minlength=256)
+                probs = counts / np.sum(counts)
+                window_entropies.append(-np.sum(probs * np.log2(probs + 1e-10)))
+            
+            payload_entropy_last_20ms[i] = np.mean(window_entropies)
+            
+            # Calculate change rate for each byte position
+            #for byte_pos in range(8):
+            #    byte_values = np.array([dataframe.iloc[idx][f'data[{byte_pos}]'] for idx in window_indices])
+            #    if len(byte_values) > 1:
+            #        changes = np.sum(byte_values[1:] != byte_values[:-1])
+            #        byte_change_rates[i, byte_pos] = changes / (len(byte_values) - 1)
+            
+            # Calculate overall payload change rate
+            changes = 0
+            for j in range(1, len(window_indices)):
+                idx_curr = window_indices[j]
+                idx_prev = window_indices[j-1]
+                
+                any_byte_changed = False
+                for byte_pos in range(8):
+                    if dataframe.iloc[idx_curr][f'data[{byte_pos}]'] != dataframe.iloc[idx_prev][f'data[{byte_pos}]']:
+                        any_byte_changed = True
+                        break
+                        
+                if any_byte_changed:
+                    changes += 1
+                    
+            payload_change_rate[i] = changes / (len(window_indices) - 1)
+                
+
+
+
     # Add the result to the dataframe
     dataframe["msg_frequency"] = msg_count_last_20ms
+    dataframe["entropy_average"] = payload_entropy_last_20ms
+    #dataframe["entropy_bit_change"] = byte_change_rates
+    dataframe["entropy_window_change"] = payload_change_rate
 
 
     # Normalize msg_count_last_50ms to [0, 1]
     max_count = dataframe["msg_frequency"].max()
+    max_count_entropy_average = dataframe["entropy_average"].max()
+    #max_count_entropy_bit_change = dataframe["entropy_bit_change"].max()
+    max_count_entropy_window_change = dataframe["entropy_window_change"].max()
+
     if max_count > 0:
         dataframe["msg_frequency"] = dataframe["msg_frequency"] / max_count
+        
     else:
         dataframe["msg_frequency"] = 0  # If max_count is 0, set all normalized values to 0
 
-    dataframe["rolling_mean_iat"] = dataframe.groupby("arbitration_id")["iat"].transform(lambda x: x.rolling(20, min_periods=1).mean())
-    dataframe["rolling_std_iat"] = dataframe.groupby("arbitration_id")["iat"].transform(lambda x: x.rolling(20, min_periods=1).std().fillna(0))
+    # Normalize entropy_average to [0, 1]
+    if max_count_entropy_average > 0:
+        dataframe["entropy_average"] = dataframe["entropy_average"] / max_count_entropy_average
+    else:
+        print("Max for entropy_average is 0 ")
+        dataframe["entropy_average"] = 0  # If max_count_entropy_average is 0, set all normalized values to 0
+
+    # Normalize entropy_bit_change to [0, 1]
+    #if max_count_entropy_bit_change > 0:
+    #    dataframe["entropy_bit_change"] = dataframe["entropy_bit_change"] / max_count_entropy_bit_change
+    #else:
+    #   dataframe["entropy_bit_change"] = 0  # If max_count_entropy_bit_change is 0, set all normalized values to 0
+
+    # Normalize entropy_window_change to [0, 1]
+    if max_count_entropy_window_change > 0:
+        dataframe["entropy_window_change"] = dataframe["entropy_window_change"] / max_count_entropy_window_change
+    else:
+        dataframe["entropy_window_change"] = 0  # If max_count_entropy_window_change is 0, set all normalized values to 0
+        print("Max for entropy_window_change is 0 ")
+
+    print(dataframe.head(2))
+
+
+    #ataframe["rolling_mean_iat"] = dataframe.groupby("arbitration_id")["iat"].transform(lambda x: x.rolling(20, min_periods=1).mean()) 
+    
+   #dataframe["rolling_std_iat"] = dataframe.groupby("arbitration_id")["iat"].transform(lambda x: x.rolling(20, min_periods=1).std().fillna(0))
 
     # Check for NaN values in 'id' or 'time' columns and handle
     if dataframe['arbitration_id'].isna().sum() > 0 or dataframe['timestamp'].isna().sum() > 0:
         print("NaN values found in 'id' or 'time' columns")
         dataframe = dataframe.dropna(subset=['arbitration_id', 'timestamp'])
-
-    if ts_fresh:
-        # Prepare for tsfresh
-        tsfresh_df = dataframe.rename(columns={"arbitration_id": "id", "timestamp": "time", "iat": "value"})
-        tsfresh_df = tsfresh_df[['id', 'time', 'value']]
-
-
-        if custom_fc_parameters is None:
-            custom_fc_parameters = EfficientFCParameters()
-
-        
-        extracted_features = extract_features(tsfresh_df, column_id="id", column_sort="time", 
-                                        default_fc_parameters=custom_fc_parameters)
-        
-        # Impute missing values
-        impute(extracted_features)
-
-        scaler = MinMaxScaler()
-        normalized_features = scaler.fit_transform(extracted_features)
-        normalized_extracted_features = pd.DataFrame(normalized_features, columns=extracted_features.columns, index=extracted_features.index)
-        
-        # Merge extracted features back to the original dataframe without losing time-series order
-        dataframe = dataframe.merge(normalized_extracted_features, left_on="arbitration_id", right_index=True, how="left")
-        dataframe.sort_values(by="timestamp")
     return dataframe
 
 
-def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows = None, ts_fresh = False, ts_fresh_parameters = None, ts_fresh_custom_features = None):
+def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows = None):
     column_names_train = ['timestamp' , 'arbitration_id' , 'channel' , 'dlc', 'data' , 'ecu']
     column_names_test = ['timestamp', 'arbitration_id', 'dlc', 'data']
     # Define consistent dtypes for all phases
@@ -278,7 +329,7 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
     scaler = MinMaxScaler()
 
     #print(dataframe.head(2))
-    dataframe = compute_temporal_features_tsfresh(dataframe, custom_fc_parameters= ts_fresh_custom_features, ts_fresh= ts_fresh)
+    #dataframe = compute_temporal_features_tsfresh(dataframe, custom_fc_parameters= ts_fresh_custom_features, ts_fresh= ts_fresh)
     #dataframe = compute_temporal_features(dataframe)
     
     dataframe = dataframe[dataframe['dlc'] == 8].reset_index(drop=True)
@@ -303,7 +354,8 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
     # Add binary-encoded IDs to the original DataFrame
     #dataframe = dataframe.drop(columns=['arbitration_id']).reset_index(drop=True)
     dataframe = pd.concat([binary_encoded_df, dataframe], axis=1)
-    
+    dataframe = compute_temporal_features(dataframe)
+
     dataframe[data_columns] = scaler.fit_transform(dataframe[data_columns])
     dataframe['timestamp'] = scaler.fit_transform(dataframe[['timestamp']])
     dataframe['payload_entropy'] = scaler.fit_transform(dataframe[['payload_entropy']])
@@ -312,21 +364,13 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
 
     # Create a combined feature column, ensuring everything is a float
     #dataframe['features'] = dataframe.apply(lambda row: np.concatenate([row[[f'bit_{i}' for i in range(num_bits)]].values , row[data_columns].values]), axis=1)
-    if ts_fresh:
-        dataframe['features'] = dataframe.apply(
-            lambda row: np.concatenate([
-                row[[f'bit_{i}' for i in range(num_bits)]].values, 
-                row[data_columns].values, 
-                row[ts_fresh_parameters].values
-            ]), axis=1
-        )
-    else:
-        dataframe['features'] = dataframe.apply(
-        lambda row: np.concatenate(
-            [row[[f'bit_{i}' for i in range(num_bits)]].values,  # Binary data columns 0 to 28
-            row[data_columns].values,  # Other data columns 28 to 36
-            np.array([row['msg_frequency'], row['iat'],row['payload_entropy'],row['hamming_distance'],row['timestamp']])  # Additional features
-            ]), axis=1)
+
+    dataframe['features'] = dataframe.apply(
+    lambda row: np.concatenate(
+        [row[[f'bit_{i}' for i in range(num_bits)]].values,  # Binary data columns 0 to 28
+         row[data_columns].values,  # Other data columns 28 to 36
+        np.array([row['msg_frequency'],row['payload_entropy'],row['timestamp'],row['entropy_average'], row['entropy_window_change']])  # Additional features
+        ]), axis=1)
 
         
         # row['iat'], row['msg_frequency'],  row['rolling_mean_iat'] , row['rolling_std_iat'],
