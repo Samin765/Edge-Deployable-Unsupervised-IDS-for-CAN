@@ -410,7 +410,7 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
             with tf.GradientTape() as tape:
                 reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
 
-                vae_loss = compute_loss_binary_continous(reconstructed,batch, mu, logvar, beta = 1)
+                vae_loss = compute_loss_continous(reconstructed,batch, mu, logvar, beta = 1)
                                 
                 z = vae.reparameterize(mu, logvar, n_samples=n_samples)
                 z = tf.reduce_mean(z, 0) # aggregate over latent samples
@@ -430,7 +430,7 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
         epoch_val_loss = 0
         show_val = validation_method in ["B_VAE","B_TCVAE"]
 
-        if validation_method == "None" or validation_method == "PLOT":
+        if validation_method == "None":
             val_loss = 0
             early_stop = False
         else:
@@ -439,11 +439,11 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
                 reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only=False)
 
                 if validation_method == "B_VAE":
-                    val_loss = compute_loss_binary_continous(reconstructed,batch, mu, logvar, beta = 1)
+                    val_loss = compute_loss_continous(reconstructed,batch, mu, logvar, beta = 1)
                     epoch_val_loss += val_loss.numpy()
 
                 elif validation_method == "B_TCVAE":
-                    vae_loss = compute_loss_binary_continous(reconstructed,batch, mu, logvar, beta = 1)
+                    vae_loss = compute_loss_continous(reconstructed,batch, mu, logvar, beta = 1)
 
 
                     z = vae.reparameterize(mu, logvar, n_samples=n_samples)
@@ -477,8 +477,10 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
                 best_val_loss = val_loss
                 wait = 0
                 # Save best model
+                """
                 save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
                 print( f'💽Saved Model at Epoch {epoch+1}💽')
+                """
             else:
                 wait += 1
                 if wait >= patience:

@@ -484,7 +484,7 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
         dataframe['timestamp'] = scaler.fit_transform(dataframe[['timestamp']])
         dataframe['payload_entropy'] = scaler.fit_transform(dataframe[['payload_entropy']])
         """
-        
+
         #### Z-Score Scaler ###
         dataframe[data_columns] = z_scaler.fit_transform(dataframe[data_columns])
         dataframe['timestamp'] = z_scaler.fit_transform(dataframe[['timestamp']])
@@ -631,14 +631,22 @@ def convert_to_tensorflow(featureframe, labels=None, batch_size=32, window_size=
         train_dataset = model_input.take(train_size)
         val_dataset = model_input.skip(train_size)
 
+        # Split val_dataset again
+        val_size = dataset_size - train_size
+        val_split_size = val_size // 2  # half
+        
+        val_dataset_1 = val_dataset.take(val_split_size)
+        val_dataset_2 = val_dataset.skip(val_split_size)
+
         # Batch
         train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+        val_dataset1 = val_dataset_1.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+        val_dataset2 = val_dataset_2.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
         print(f"Feature shape BEFORE sliding window: {before_window_shape}")
         print(f"Feature shape AFTER sliding window: {input_data.shape}")
         print("#####################################")
-        return train_dataset, val_dataset  
+        return train_dataset, val_dataset1, val_dataset2
 
     # Apply batching
     model_input = model_input.batch(batch_size)
