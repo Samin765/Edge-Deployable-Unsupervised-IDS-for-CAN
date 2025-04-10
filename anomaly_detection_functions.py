@@ -262,7 +262,107 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
     print(f"Get Thresold from Train completed in {time.time() - start_time:.4f} seconds")
     return reconsutrction_normal_threshold,reconsutrction_probability_threshold, latent_normal_threshold, mean_train, variance_train, load_vae, tree
 
+def get_threshold_from_test(model_path, test_dataset, val_dataset, reconstruction_AD, latent_AD, binary = False, val_dataset2 = None):    
+    start_time = time.time()
+    load_vae = keras.models.load_model(model_path)
+    load_vae.trainable = False  # Freeze model weights
+    tree = None
+    # Compute reconstruction losses on the test set with multiple samples
+    n_samples = 10  # Number of latent samples during inference
+    reconstruction_errors_threshold = []
+    reconstruction_probs_threshold = []
 
+    mean_train = []
+    variance_train = []
+
+    normal_distances_threshold = []
+    if latent_AD:
+        """
+
+        for batch in train_dataset:
+
+            reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = latent_AD)  
+            batch_data = batch.numpy() 
+
+            for i in range(len(batch)):
+
+                mean_train.append(mu[i])
+                variance_train.append(np.exp(logvar[i]))
+
+        print(f"Collect Mean & Variance from Train completed in {time.time() - start_time:.4f} seconds")
+        """
+        mean_train , variance_train , labels = get_mean_variances(test_dataset, test = True, load_vae = load_vae, model_path= "")
+
+        # Preprocess your normal data
+        start_time_ball_tree = time.time()
+        combined_params = np.hstack([mean_train, variance_train])  # Combine mean and variance
+        tree = BallTree(combined_params, metric='pyfunc', func=bhattacharyya_distance_old_balltree)
+        print(f"Ball Tree completed in {time.time() - start_time_ball_tree:.4f} seconds")
+
+    debug = 0
+    for batch, labels in val_dataset:
+
+        reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+
+        if reconstruction_AD:
+            
+            mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
+            reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+
+        batch_data = batch.numpy()  
+        for i in range(len(batch_data)):
+            if reconstruction_AD: 
+
+                if debug < 200:
+
+                    print("recon error from val" , mean_reconstruction_error[i].numpy().item())
+                    debug += 1
+
+                reconstruction_errors_threshold.append(mean_reconstruction_error[i].numpy().item())
+                reconstruction_probs_threshold.append(reconstruction_probabilties[i].numpy().item())
+
+            if latent_AD:
+
+                distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
+                if debug < 200:
+
+                    print("Distance from val" , distance)
+                    debug += 1
+                #combined_anomaly = np.hstack([mu[i], np.exp(logvar[i])])
+                #distances_tree, _ = tree.query([combined_anomaly], k=1)  # Find nearest neighbor
+                #distance = distances_tree[0][0]
+                normal_distances_threshold.append(distance)
+                
+
+    reconsutrction_normal_threshold = 0 
+    reconsutrction_probability_threshold = 0            
+    latent_normal_threshold = 0
+    if latent_AD:
+        # Set anomaly threshold 
+        #latent_normal_threshold = np.percentile(normal_distances_threshold, 99.5)
+        #latent_normal_threshold = np.max(normal_distances_threshold) + np.percentile(normal_distances_threshold, (1 - 0.5)) #<-- maybe better
+        latent_normal_threshold = np.mean(normal_distances_threshold) + np.percentile(normal_distances_threshold, (0.05))
+        print("########### Latent Thhresholds ##############")
+
+        print(f"Normal LATENT threshold: {latent_normal_threshold:.7f}")
+        print("########################################")
+
+    if reconstruction_AD:
+        reconsutrction_normal_threshold = np.mean(reconstruction_errors_threshold)
+        #reconsutrction_normal_threshold = np.percentile(reconstruction_errors_threshold, 99.5)
+        #reconsutrction_normal_threshold = np.max(reconstruction_errors_threshold) * 1.001
+        print("########## Reconstruction Thhresholds ##########")
+        print(f"Normal Reconstruction threshold: {reconsutrction_normal_threshold:.7f}")
+
+        #reconsutrction_probability_threshold = np.percentile(reconstruction_probs_threshold, 99.5)
+        reconsutrction_probability_threshold = np.mean(reconstruction_probs_threshold)
+
+        print(f"Normal Recon Probability threshold: {reconsutrction_probability_threshold:.7f}")
+        print("########################################")
+    
+
+    print(f"Get Thresold from Train completed in {time.time() - start_time:.4f} seconds")
+    return reconsutrction_normal_threshold,reconsutrction_probability_threshold, latent_normal_threshold, mean_train, variance_train, load_vae, tree
 """
 The following functions handles distance based AD
 """

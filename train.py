@@ -661,3 +661,193 @@ def train_model_bernoulli(vae,optimizer,discriminator_optimizer, epochs, n_sampl
     #vae.summary()
     return train_losses, val_losses, real_epochs, time, show_val, model_path, vae
 
+
+
+"""
+SEMI-Supervised VAE based on:
+
+"N/A"
+"""
+def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_dim, latent_dim, 
+                batch_size,beta, gamma, n_critic, steps_anneal, patience, time,beta_tc = 0, validation_method = 'None', 
+                model_path = "", train_dataset = None,test_dataset = None,val_dataset = None, n_rows_train = 0, AWS = False,
+                s3 = None, BUCKET = "" ):   
+    wait = 0  
+    model_name ="SEMI-Supervised-VAE"
+
+    print(f"Input Dimension = {input_dim}, "
+        f"Latent Dimension = {latent_dim}, "
+        f"Beta = {beta}, Validation Method = {validation_method}, "
+        f"Rows in Training Data = {n_rows_train}, "
+        f"Batch Size = {batch_size} "
+        ) 
+    train_losses = []
+    val_losses = []
+    best_val_loss = float('inf')
+    real_epochs = 0
+
+    # Training loop
+    for epoch in range(epochs):
+        real_epochs += 1
+        epoch_loss = 0
+
+        for step, batch_data in enumerate(train_dataset): # window size , features
+            try:
+                batch, labels = batch_data
+                print("label shape" , labels.shape)
+
+            except ValueError:
+                print("Labels is None")
+                batch = batch_data
+                labels = None
+
+            global_step = epoch * len(train_dataset) + step  # Total training step count
+            loss = 0
+            anneal_coeff = linear_annealing(0, 1, global_step, steps_anneal)
+            #print(len(batch))
+            # Train VAE
+            with tf.GradientTape() as tape:
+                reconstructed, mu, logvar , hidden= vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
+                
+                print("reconstructed shape" , reconstructed.shape)
+                print("mu shape" , mu.shape)
+                print("logvar shape" , logvar.shape)
+
+                
+                recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
+                kl_loss = compute_kl_divergence_normal(mu, logvar)
+
+                loss_recon_semi , loss_classifier = vae.compute_loss(labels, recon_loss_batch , n_samples, hidden )
+
+                print("loss_recon_semi" , loss_recon_semi.shape)
+                print("loss_classifier_semi" , loss_classifier.shape)
+
+                print("kl_loss" , kl_loss.shape)
+
+                loss = loss_recon_semi + kl_loss + loss_classifier
+            
+
+
+
+
+
+            gradients = tape.gradient(loss, vae.trainable_variables)
+            gradients, _ = tf.clip_by_global_norm(gradients, 1.0)
+            optimizer.apply_gradients(zip(gradients, vae.trainable_variables))
+
+            epoch_loss += loss.numpy()
+
+        # VALIDATION
+        epoch_val_loss = 0
+        show_val = validation_method in ["B_VAE"]
+
+        if validation_method == "None" or validation_method == "PLOT":
+            val_loss = 0
+            early_stop = False
+        else:
+            early_stop = True
+            for batch, labels in val_dataset:
+                reconstructed, mu, logvar , hidden= vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
+
+
+
+                recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
+                kl_loss = compute_kl_divergence_normal(mu, logvar)
+
+                loss_recon_semi , loss_classifier = vae.compute_loss(labels, recon_loss_batch , n_samples, hidden )
+                val_loss = loss_recon_semi + kl_loss + loss_classifier
+
+                    
+                epoch_val_loss += val_loss.numpy()
+
+
+        if epoch % 50 == 0 and epoch > 0:
+            print("PLOT AT EPOCH: ", {epoch + 1})
+            get_latent_representations_label(vae, test_dataset, latent_dim, beta,n_critic,gamma,time,epoch = epoch, name = model_name,type = 'TSNE', save = False, AWS = AWS, s3 = s3, BUCKET = BUCKET)
+
+
+        # Store the loss for this epoch
+        train_loss = epoch_loss / len(train_dataset)
+        val_loss = epoch_val_loss / len(val_dataset) 
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
+
+        print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, "
+            f"Val Loss: {val_loss:.6f}")
+        
+        if early_stop:
+            # Early stopping check
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                wait = 0
+                # Save best model
+                #model_path = save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
+                #print( f'💽Saved Model at Epoch {epoch+1}💽')
+            else:
+                wait += 1
+                if wait >= patience:
+                    epochs = epoch + 1
+                    print(f"Early stopping triggered at epoch {epoch + 1}")
+                    break
+        
+        # Save the trained model each 10th epoch
+        if epoch % 50 == 0 and epoch > 0 and False:
+            model_path = save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch,input_dim= input_dim, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
+            print( f'💽Saved Model at Epoch {epoch+1}💽')
+
+    model_path = save_trained_model(vae, optimizer, model_path, model_name, latent_dim,beta,n_rows_train,time,epoch,input_dim= input_dim, AWS = AWS, s3 = s3 , BUCKET = BUCKET)
+    print( f'💽Saved Model at Epoch {epoch+1}💽')
+
+    print("💽Loss Plot Saved.💽")
+    print("💽VAE model saved.💽")
+    #vae.summary()
+    return train_losses, val_losses, real_epochs, time, show_val, model_path, vae
+
+
+
+
+
+
+
+
+
+
+
+
+# IGNORE
+
+"""
+    # Get masks
+                normal_mask = tf.cast(labels == 0, tf.bool)
+                anomaly_mask = tf.cast(labels == 1, tf.bool)
+
+                # Separate samples
+                batch_normal = tf.boolean_mask(batch, normal_mask)
+                mu_normal = tf.boolean_mask(mu, normal_mask)
+                logvar_normal = tf.boolean_mask(logvar, normal_mask)
+                reconstructed_normal = tf.boolean_mask(reconstructed, normal_mask, axis = 1)
+                if not tf.reduce_any(normal_mask):
+                    normal_loss = 0
+                else: 
+                    # Main normal sample loss
+                    normal_loss = compute_loss_continous(reconstructed_normal, batch_normal, mu_normal, logvar_normal, beta)
+
+                # Optional anomaly penalty
+                if tf.reduce_any(anomaly_mask):
+                    batch_anomaly = tf.boolean_mask(batch, anomaly_mask)
+                    reconstructed_anomaly = tf.boolean_mask(reconstructed, anomaly_mask, axis = 1)
+                    recon_anomaly_loss = tf.reduce_mean(tf.square(batch_anomaly - reconstructed_anomaly))
+                    loss = normal_loss - 1 * recon_anomaly_loss
+                    #print("Both normal loss", normal_loss)
+                    #print("anomaly loss", recon_anomaly_loss)
+
+
+                else:
+                    loss = normal_loss 
+                    #print("Only normal loss", normal_loss)
+
+"""
+
+
