@@ -694,10 +694,10 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
         for step, batch_data in enumerate(train_dataset): # window size , features
             try:
                 batch, labels = batch_data
-                print("label shape" , labels.shape)
+                #print("label shape" , labels.shape)
 
             except ValueError:
-                print("Labels is None")
+                #print("Labels is None")
                 batch = batch_data
                 labels = None
 
@@ -709,9 +709,9 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
             with tf.GradientTape() as tape:
                 reconstructed, mu, logvar , hidden= vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
                 
-                print("reconstructed shape" , reconstructed.shape)
-                print("mu shape" , mu.shape)
-                print("logvar shape" , logvar.shape)
+                #print("reconstructed shape" , reconstructed.shape)
+                #print("mu shape" , mu.shape)
+                #print("logvar shape" , logvar.shape)
 
                 
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
@@ -719,10 +719,10 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
 
                 loss_recon_semi , loss_classifier = vae.compute_loss(labels, recon_loss_batch , n_samples, hidden )
 
-                print("loss_recon_semi" , loss_recon_semi.shape)
-                print("loss_classifier_semi" , loss_classifier.shape)
+                #print("loss_recon_semi" , loss_recon_semi)
+                #print("loss_classifier_semi" , loss_classifier)
 
-                print("kl_loss" , kl_loss.shape)
+                #print("kl_loss" , kl_loss)
 
                 loss = loss_recon_semi + kl_loss + loss_classifier
             
