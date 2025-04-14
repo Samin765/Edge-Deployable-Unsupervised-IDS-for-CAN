@@ -236,6 +236,7 @@ def compute_temporal_features(dataframe, custom_fc_parameters = None, ts_fresh =
 
 
 
+    """
     # Normalize msg_count_last_50ms to [0, 1]
     max_count = dataframe["msg_frequency"].max()
     max_count_entropy_average = dataframe["entropy_average"].max()
@@ -275,7 +276,7 @@ def compute_temporal_features(dataframe, custom_fc_parameters = None, ts_fresh =
     else:
         print("Max for entropy_id_std is 0")
         dataframe["entropy_id_std"] = 0  # If max_count_entropy_id_entropy_std is 0, set all normalized values to 0
-
+    """
     # Check for NaN values in 'id' or 'time' columns and handle
     if dataframe['arbitration_id'].isna().sum() > 0 or dataframe['timestamp'].isna().sum() > 0:
         print("NaN values found in 'id' or 'time' columns")
@@ -286,7 +287,7 @@ def compute_temporal_features(dataframe, custom_fc_parameters = None, ts_fresh =
     return dataframe
 
 
-def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows = None, binary = False, binary_id = True, embedding_model = None, id_to_embedding = None):
+def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows = None, binary = False, binary_id = True, embedding_model = None, id_to_embedding = None, scalers = None):
     start_time = time.time()
     print("#############START#####################")
 
@@ -375,9 +376,7 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
     except Exception as e:
         print(f"Error processing data: {e}")
         return None
-    
-    scaler = MinMaxScaler()
-    z_scaler = StandardScaler()
+
     
     dataframe = dataframe[dataframe['dlc'] == 8].reset_index(drop=True)
 
@@ -477,6 +476,49 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
     # Compute Temporal Features and Normalize
     if not binary: 
         dataframe = compute_temporal_features(dataframe)
+        if phase == "training":
+            scalers = {}
+            z_scaler_data_features = StandardScaler()
+            # Apply Z-score normalization using StandardScaler
+            z_scaler_temporal_features = StandardScaler()
+
+            temporal_feature_columns = [
+                "msg_frequency",
+                "entropy_average",
+                "entropy_bit_change",
+                "entropy_id",
+                "entropy_id_std",
+                "timestamp",
+                "payload_entropy"
+            ]
+
+            dataframe[temporal_feature_columns] = z_scaler_temporal_features.fit_transform(dataframe[temporal_feature_columns])
+            dataframe[data_columns] = z_scaler_data_features.fit_transform(dataframe[data_columns])
+
+            scalers['temporal_feature_scaler'] = z_scaler_temporal_features
+            scalers['data_scaler'] = z_scaler_data_features
+
+        else:
+
+            z_scaler_temporal_features = scalers['temporal_feature_scaler'] 
+            z_scaler_data_features = scalers['data_scaler'] 
+
+            temporal_feature_columns = [
+                "msg_frequency",
+                "entropy_average",
+                "entropy_bit_change",
+                "entropy_id",
+                "entropy_id_std",
+                "timestamp",
+                "payload_entropy"
+            ]
+
+
+            dataframe[temporal_feature_columns] = z_scaler_temporal_features.transform(dataframe[temporal_feature_columns])
+            dataframe[data_columns] = z_scaler_data_features.transform(dataframe[data_columns])
+
+
+            
 
         #### Min-Max Scaler ###
         """
@@ -486,9 +528,9 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
         """
 
         #### Z-Score Scaler ###
-        dataframe[data_columns] = z_scaler.fit_transform(dataframe[data_columns])
-        dataframe['timestamp'] = z_scaler.fit_transform(dataframe[['timestamp']])
-        dataframe['payload_entropy'] = z_scaler.fit_transform(dataframe[['payload_entropy']])
+        #dataframe[data_columns] = z_scaler.fit_transform(dataframe[data_columns])
+        #dataframe['timestamp'] = z_scaler.fit_transform(dataframe[['timestamp']])
+        #dataframe['payload_entropy'] = z_scaler.fit_transform(dataframe[['payload_entropy']]) # return scaler and use same on test
 
 
 
@@ -527,7 +569,7 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
 
     if phase == 'test':
         return dataframe
-    return dataframe, embedding_model, id_to_embedding
+    return dataframe, embedding_model, id_to_embedding, scalers
 
 
 def create_sliding_windows(data, labels=None, window_size=5, stride=1, anomaly_window = 5):

@@ -144,16 +144,25 @@ def get_mean_variances(dataset, test = False, load_vae = None, model_path = ""):
 
     if test: 
         for batch, label in dataset:
-            _, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = True)  
+            model_outputs = load_vae(batch, n_samples=n_samples, latent_only = True)  
+
+            mu = model_outputs['mu']
+            logvar = model_outputs['logvar']
+            
             for i in range(len(batch)):
                 mean_train.append(mu[i])
                 variance_train.append(np.exp(logvar[i]))
                 labels.append(label[i])
+                
         print(f"Get Mean and Variances completed in: {time.time() - start_time:.4f} seconds")
         return mean_train, variance_train, labels
     else:
         for batch in dataset:
-            _, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = True)  
+            model_outputs = load_vae(batch, n_samples=n_samples, latent_only = True)
+
+            mu = model_outputs['mu']
+            logvar = model_outputs['logvar']  
+
             for i in range(len(batch)):
                 mean_train.append(mu[i])
                 variance_train.append(np.exp(logvar[i]))
@@ -200,7 +209,11 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
     debug = 0
     for batch in val_dataset:
 
-        reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+        model_outputs = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+
+        reconstructed = model_outputs['reconstructed']
+        mu = model_outputs['mu']
+        logvar = model_outputs['logvar']
 
         if reconstruction_AD:
             
@@ -302,7 +315,11 @@ def get_threshold_from_test(model_path, test_dataset, val_dataset, reconstructio
     debug = 0
     for batch, labels in val_dataset:
 
-        reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+        model_outputs = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+
+        reconstructed = model_outputs['reconstructed']
+        mu = model_outputs['mu']
+        logvar = model_outputs['logvar']
 
         if reconstruction_AD:
             
@@ -382,8 +399,11 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
     debug_count = 0
     for batch, label in test_dataset:
         #print(batch.shape)
-        reconstructed, mu, logvar = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  # Use multiple samples
-        
+        model_outputs = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  # Use multiple samples
+
+        reconstructed = model_outputs['reconstructed']
+        mu = model_outputs['mu']
+        logvar = model_outputs['logvar']
         # Compute reconstruction errors (mean over all features)
         if reconstruction_AD:
             
@@ -452,11 +472,11 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
         for i in range(len(results)):
 
             reconstruction_error = results[i][-1] 
-            anomaly_label = 1 if reconstruction_error > reconstruction_normal_threshold else 0  
+            anomaly_label = 1 if reconstruction_error > 5 else 0  
             copy_results_errors[i] = np.append(results[i], anomaly_label)   
 
             reconstruction_prob = results_probs[i][-1] 
-            anomaly_label = 1 if reconstruction_prob > reconstruction_probability_threshold else 0  
+            anomaly_label = 1 if reconstruction_prob > 50 else 0  
             copy_results_probs[i] = np.append(results_probs[i], anomaly_label)  
 
         # Print summary

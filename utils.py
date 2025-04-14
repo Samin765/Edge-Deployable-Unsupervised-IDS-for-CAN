@@ -167,7 +167,7 @@ def plot_tsne(normal_dataframe, mixed_dataframe):
     plt.show()
 
 
-def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,gamma,time,epoch,name = "",type='PCA', save = False, AWS = False, s3 = None, BUCKET = ""):    
+def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,gamma,time,epoch,name = "",type='PCA', save = False, AWS = False, s3 = None, BUCKET = "", reducer = None):    
     latent_representations = []
     labels = []  # Collect labels if available
 
@@ -178,7 +178,9 @@ def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,ga
         else:
             batch_labels = None  # 
 
-        _, mu, _ = vae(batch, n_samples=1, latent_only = True)
+        model_outputs = vae(batch, n_samples=1, latent_only = True)
+
+        mu = model_outputs['mu']
         latent_representations.append(mu.numpy())
 
     latent_representations = np.concatenate(latent_representations, axis=0)
@@ -189,13 +191,20 @@ def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,ga
         labels = None  
 
     if type == 'PCA':
-        reducer = PCA(n_components=2)
+        if reducer is None:
+            reducer = PCA(n_components=2)
+            reducer.fit(latent_representations)
+        latent_2d = reducer.fit_transform(latent_representations)  # todo: use same pca for plotting, seperate to fit and transform function, use same scaler for testing
+        
     elif type == 'TSNE':
+
         reducer = TSNE(n_components=2, random_state=42)
+        latent_2d = reducer.fit_transform(latent_representations)  # todo: use same pca for plotting, seperate to fit and transform function, use same scaler for testing
+
     else:
         raise ValueError("Invalid type. Choose 'PCA' or 'TSNE'.")
 
-    latent_2d = reducer.fit_transform(latent_representations)
+    
 
     # Plot # TOdo: plot dimension 2,3
     plt.figure(figsize=(10, 8))
@@ -249,6 +258,9 @@ def get_latent_representations_label(vae, dataset, latent_dim, beta ,n_critic,ga
             plt.savefig(plot_name)
 
     plt.show()
+
+    if type == 'PCA':
+        return reducer
 
 
 def analyze_latent_variance(vae, train, test,device='cuda'):

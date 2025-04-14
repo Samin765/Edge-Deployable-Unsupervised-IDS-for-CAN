@@ -138,7 +138,12 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
             #print(len(batch))
             # Train VAE
             with tf.GradientTape() as tape:
-                reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+                model_outputs = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
+
                 #print(reconstructed)
                 loss = compute_loss_continous(reconstructed, batch, mu, logvar, beta)
 
@@ -158,8 +163,12 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
         else:
             early_stop = True
             for batch in val_dataset:
-                reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only=False)
+                model_outputs = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
 
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
+                
                 val_loss = compute_loss_continous(reconstructed, batch, mu, logvar, beta)
                 
                 epoch_val_loss += val_loss.numpy()
@@ -251,7 +260,11 @@ def train_model_factor(vae,optimizer,discriminator_optimizer, epochs, n_samples,
 
             # 1. Train VAE with first batch
             with tf.GradientTape() as tape:
-                reconstructed, mu, logvar = vae(first_half_batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+                model_outputs = vae(first_half_batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
 
                 vae_loss = compute_loss_binary_continous(reconstructed,batch, mu, logvar, beta = 1)
                                 
@@ -307,7 +320,11 @@ def train_model_factor(vae,optimizer,discriminator_optimizer, epochs, n_samples,
         else:
             early_stop = True
             for batch in val_dataset:
-                reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only=latent_only)
+                model_outputs = vae(batch, n_samples=n_samples, latent_only=latent_only)
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
 
                 if validation_method == "B_VAE":
                     vae_loss = compute_loss_binary_continous(reconstructed,batch, mu, logvar, beta = 1)
@@ -408,7 +425,11 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
 
             # 1. Train VAE
             with tf.GradientTape() as tape:
-                reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+                model_outputs = vae(batch, n_samples=n_samples, latent_only = False)  # Use multiple samples
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
 
                 vae_loss = compute_loss_continous(reconstructed,batch, mu, logvar, beta = 1)
                                 
@@ -436,7 +457,10 @@ def train_model_btc(vae,optimizer,discriminator_optimizer, epochs, n_samples, in
         else:
             early_stop = True
             for batch in val_dataset:
-                reconstructed, mu, logvar = vae(batch, n_samples=n_samples, latent_only=False)
+                model_outputs = vae(batch, n_samples=n_samples, latent_only=False)
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
 
                 if validation_method == "B_VAE":
                     val_loss = compute_loss_continous(reconstructed,batch, mu, logvar, beta = 1)
@@ -535,8 +559,12 @@ def train_model_bernoulli(vae,optimizer,discriminator_optimizer, epochs, n_sampl
 
             # Train VAE
             with tf.GradientTape() as tape:
-                reconstructed, mu, logvar, z = vae(batch, latent_only = False)  # Use multiple samples
-                
+                model_outputs = vae(batch, latent_only = False)  # Use multiple samples
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
+                z = model_outputs['z']
 
                 # BCE loss for binary features
                 #bce_errors = tf.keras.losses.BinaryCrossentropy(reduction='none')(
@@ -605,6 +633,10 @@ def train_model_bernoulli(vae,optimizer,discriminator_optimizer, epochs, n_sampl
             early_stop = True
             for batch in val_dataset:
                 reconstructed, mu, logvar = vae(batch, latent_only=False)
+
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
 
                 reconstruction_errors = tf.reduce_mean(
                     tf.square(tf.expand_dims(batch, axis=0) - reconstructed), axis=-1
@@ -707,8 +739,14 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
             #print(len(batch))
             # Train VAE
             with tf.GradientTape() as tape:
-                reconstructed, mu, logvar , hidden= vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
+                model_outputs = vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
                 
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
+                hidden = model_outputs['hidden']
+                y_pred = model_outputs['y_pred']
+
                 #print("reconstructed shape" , reconstructed.shape)
                 #print("mu shape" , mu.shape)
                 #print("logvar shape" , logvar.shape)
@@ -717,16 +755,22 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
                 kl_loss = compute_kl_divergence_normal(mu, logvar)
 
-                loss_recon_semi , loss_classifier = vae.compute_loss(labels, recon_loss_batch , n_samples, hidden )
+                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred)
 
-                #print("loss_recon_semi" , loss_recon_semi)
-                #print("loss_classifier_semi" , loss_classifier)
+                classification_loss = losses['classification_loss']
+            
+                masked_recon_loss = losses['masked_recon_loss']
+
+                kappa = losses['kappa']
+
+                #print("loss_recon_semi" , masked_recon_loss)
+                #print("loss_classifier_semi" , classification_loss)
 
                 #print("kl_loss" , kl_loss)
 
-                loss = loss_recon_semi + kl_loss + loss_classifier
+                loss = masked_recon_loss + kl_loss * kappa + classification_loss
             
-
+                #print(loss)
 
 
 
@@ -746,16 +790,33 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
             early_stop = False
         else:
             early_stop = True
-            for batch, labels in val_dataset:
-                reconstructed, mu, logvar , hidden= vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
+            for batch_data in val_dataset:
+                try:
+                    batch, labels = batch_data
+                    #print("label shape" , labels.shape)
+                except ValueError:
+                    #print("Labels is None")
+                    batch = batch_data
+                    labels = None
 
+                model_outputs = vae(batch, labels,n_samples=n_samples, latent_only = False)  # Use multiple samples
 
+                reconstructed = model_outputs['reconstructed']
+                mu = model_outputs['mu']
+                logvar = model_outputs['logvar']
+                hidden = model_outputs['hidden']
+                y_pred = model_outputs['y_pred']
 
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
                 kl_loss = compute_kl_divergence_normal(mu, logvar)
 
-                loss_recon_semi , loss_classifier = vae.compute_loss(labels, recon_loss_batch , n_samples, hidden )
-                val_loss = loss_recon_semi + kl_loss + loss_classifier
+                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred)
+
+                classification_loss = losses['classification_loss']
+            
+                masked_recon_loss = losses['masked_recon_loss']
+
+                val_loss = masked_recon_loss + kl_loss + classification_loss
 
                     
                 epoch_val_loss += val_loss.numpy()
