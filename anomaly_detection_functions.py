@@ -153,7 +153,7 @@ def get_mean_variances(dataset, test = False, load_vae = None, model_path = ""):
                 mean_train.append(mu[i])
                 variance_train.append(np.exp(logvar[i]))
                 labels.append(label[i])
-                
+
         print(f"Get Mean and Variances completed in: {time.time() - start_time:.4f} seconds")
         return mean_train, variance_train, labels
     else:
@@ -216,9 +216,20 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
         logvar = model_outputs['logvar']
 
         if reconstruction_AD:
-            
-            mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
-            reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+            try: 
+                hidden = model_outputs['hidden']
+                y_pred = model_outputs['y_pred']
+                recon_loss_batch = compute_loss_continous(reconstructed, batch, None , None, None, AD = True)
+
+                losses = load_vae.compute_loss(None, recon_loss_batch , hidden , y_pred, AD = True)
+
+                classification_loss = losses['classification_loss']
+                masked_recon_loss_batch = losses['masked_recon_loss']
+
+                mean_reconstruction_error = masked_recon_loss_batch # Fortsätt här använd classification loss
+            except ValueError:
+                mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
+                reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
 
         batch_data = batch.numpy()  
         for i in range(len(batch_data)):
@@ -472,11 +483,11 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
         for i in range(len(results)):
 
             reconstruction_error = results[i][-1] 
-            anomaly_label = 1 if reconstruction_error > 5 else 0  
+            anomaly_label = 1 if reconstruction_error > reconstruction_normal_threshold else 0  
             copy_results_errors[i] = np.append(results[i], anomaly_label)   
 
             reconstruction_prob = results_probs[i][-1] 
-            anomaly_label = 1 if reconstruction_prob > 50 else 0  
+            anomaly_label = 1 if reconstruction_prob > 36.5 else 0  
             copy_results_probs[i] = np.append(results_probs[i], anomaly_label)  
 
         # Print summary
