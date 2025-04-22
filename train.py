@@ -763,21 +763,20 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
 
                 
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
-                kl_loss = compute_kl_divergence_normal(mu, logvar)
 
-                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred)
+                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred, AD = False)
 
                 classification_loss = losses['classification_loss']
-            
                 masked_recon_loss = losses['masked_recon_loss']
-
                 kappa = losses['kappa']
 
+                kl_loss = compute_kl_divergence_normal(mu, logvar, kappa=kappa)
+
+                """
                 print("loss_recon_semi" , masked_recon_loss)
                 print("loss_classifier_semi" , classification_loss)
-
                 print("kl_loss" , kl_loss)
-
+                """
                 loss = masked_recon_loss + kl_loss * kappa + classification_loss
             
                 #print(loss)
@@ -820,13 +819,15 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
                 kl_loss = compute_kl_divergence_normal(mu, logvar)
 
-                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred)
+                losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred, AD = False)
 
                 classification_loss = losses['classification_loss']
-            
                 masked_recon_loss = losses['masked_recon_loss']
+                kappa = losses['kappa']
 
-                val_loss = masked_recon_loss + kl_loss + classification_loss
+                kl_loss = compute_kl_divergence_normal(mu, logvar, kappa=kappa)
+
+                val_loss = masked_recon_loss + kl_loss * kappa + classification_loss
 
                     
                 epoch_val_loss += val_loss.numpy()
@@ -841,9 +842,15 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
         train_loss = epoch_loss / len(train_dataset)
         val_loss = epoch_val_loss / len(val_dataset) 
 
+
+        train_loss = (epoch_loss / len(train_dataset)).item() if isinstance(epoch_loss, np.ndarray) else epoch_loss / len(train_dataset)
+        val_loss = (epoch_val_loss / len(val_dataset)).item() if isinstance(epoch_val_loss, np.ndarray) else epoch_val_loss / len(val_dataset)
+
         train_losses.append(train_loss)
         val_losses.append(val_loss)
 
+        #print(train_loss)
+        #print(val_loss)
 
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, "
             f"Val Loss: {val_loss:.6f}")
