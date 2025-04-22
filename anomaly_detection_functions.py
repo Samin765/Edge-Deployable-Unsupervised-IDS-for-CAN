@@ -216,20 +216,9 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
         logvar = model_outputs['logvar']
 
         if reconstruction_AD:
-            try: 
-                hidden = model_outputs['hidden']
-                y_pred = model_outputs['y_pred']
-                recon_loss_batch = compute_loss_continous(reconstructed, batch, None , None, None, AD = True)
-
-                losses = load_vae.compute_loss(None, recon_loss_batch , hidden , y_pred, AD = True)
-
-                classification_loss = losses['classification_loss']
-                masked_recon_loss_batch = losses['masked_recon_loss']
-
-                mean_reconstruction_error = masked_recon_loss_batch # Fortsätt här använd classification loss
-            except ValueError:
-                mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
-                reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+            
+            mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
+            reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
 
         batch_data = batch.numpy()  
         for i in range(len(batch_data)):
@@ -260,7 +249,7 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
     reconsutrction_probability_threshold = 0            
     latent_normal_threshold = 0
     if latent_AD:
-        # Set anomaly threshold 
+        # Set anomaly threshold s
         #latent_normal_threshold = np.percentile(normal_distances_threshold, 99.5)
         #latent_normal_threshold = np.max(normal_distances_threshold) + np.percentile(normal_distances_threshold, (1 - 0.5)) #<-- maybe better
         latent_normal_threshold = np.mean(normal_distances_threshold) + np.percentile(normal_distances_threshold, (0.05))

@@ -4,12 +4,19 @@ import numpy as np
 """
 Loss Functions 
 """
+"""
+def compute_kl_divergence_normal(mu, logvar):
+    kl_divergence_loss = -0.5 * tf.reduce_mean(tf.reduce_sum(1 + logvar - tf.square(mu) - tf.exp(logvar), axis=-1))     
+    return kl_divergence_loss
+"""
+
 def compute_kl_divergence_normal(mu, logvar, kappa = None):
     if kappa is None:
-        kl_divergence_loss = -0.5 * tf.reduce_mean(tf.reduce_sum(1 + logvar - tf.square(mu) - tf.exp(logvar), axis=-1))
+        kl_divergence_loss = -0.5 * tf.reduce_mean(tf.reduce_sum(1 + logvar - tf.square(mu) - tf.exp(logvar), axis=-1))     
     else:
         kl_divergence_loss = -0.5 * tf.reduce_mean(kappa * tf.reduce_sum(1 + logvar - tf.square(mu) - tf.exp(logvar), axis=-1))     
     return kl_divergence_loss
+    
 
 def compute_loss_binary(reconstructed, batch, mu, logvar, beta, AD = False):
     #reconstructed = tf.reduce_mean(reconstructed, axis = 0)
@@ -754,21 +761,24 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
                 #print("mu shape" , mu.shape)
                 #print("logvar shape" , logvar.shape)
 
+                
                 recon_loss_batch = compute_loss_continous(reconstructed, batch, mu , logvar, beta, AD = True)
+                kl_loss = compute_kl_divergence_normal(mu, logvar)
 
                 losses = vae.compute_loss(labels, recon_loss_batch , hidden , y_pred)
 
                 classification_loss = losses['classification_loss']
+            
                 masked_recon_loss = losses['masked_recon_loss']
+
                 kappa = losses['kappa']
 
-                kl_loss = compute_kl_divergence_normal(mu, logvar, kappa = kappa)
+                print("loss_recon_semi" , masked_recon_loss)
+                print("loss_classifier_semi" , classification_loss)
 
-                #print("loss_recon_semi" , masked_recon_loss)
-                #print("loss_classifier_semi" , classification_loss)
-                #print("kl_loss" , kl_loss)
+                print("kl_loss" , kl_loss)
 
-                loss = masked_recon_loss + kl_loss + classification_loss
+                loss = masked_recon_loss + kl_loss * kappa + classification_loss
             
                 #print(loss)
 
@@ -795,7 +805,7 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
                     batch, labels = batch_data
                     #print("label shape" , labels.shape)
                 except ValueError:
-                    #print("Labels is None")
+                    #print("Labels is None")s
                     batch = batch_data
                     labels = None
 
@@ -833,8 +843,7 @@ def train_model_semi(vae,optimizer,discriminator_optimizer, epochs, n_samples, i
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
-        #print(train_loss)
-        #print(val_loss)
+
 
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, "
             f"Val Loss: {val_loss:.6f}")
