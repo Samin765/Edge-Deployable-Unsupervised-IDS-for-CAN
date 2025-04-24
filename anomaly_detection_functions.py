@@ -275,7 +275,7 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
     print(f"Get Thresold from Train completed in {time.time() - start_time:.4f} seconds")
     return reconsutrction_normal_threshold,reconsutrction_probability_threshold, latent_normal_threshold, mean_train, variance_train, load_vae, tree
 
-def get_threshold_from_test(model_path, test_dataset, val_dataset, reconstruction_AD, latent_AD, binary = False, val_dataset2 = None):    
+def get_threshold_from_test(model_path, train_dataset, val_dataset, reconstruction_AD, latent_AD, binary = False, val_dataset2 = None):    
     start_time = time.time()
     load_vae = keras.models.load_model(model_path)
     load_vae.trainable = False  # Freeze model weights
@@ -304,7 +304,7 @@ def get_threshold_from_test(model_path, test_dataset, val_dataset, reconstructio
 
         print(f"Collect Mean & Variance from Train completed in {time.time() - start_time:.4f} seconds")
         """
-        mean_train , variance_train , labels = get_mean_variances(test_dataset, test = True, load_vae = load_vae, model_path= "")
+        mean_train , variance_train , labels = get_mean_variances(train_dataset, test = True, load_vae = load_vae, model_path= "")
 
         # Preprocess your normal data
         start_time_ball_tree = time.time()
@@ -476,7 +476,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
             copy_results_errors[i] = np.append(results[i], anomaly_label)   
 
             reconstruction_prob = results_probs[i][-1] 
-            anomaly_label = 1 if reconstruction_prob > 36.5 else 0  
+            anomaly_label = 1 if reconstruction_prob > reconstruction_probability_threshold else 0  
             copy_results_probs[i] = np.append(results_probs[i], anomaly_label)  
 
         # Print summary

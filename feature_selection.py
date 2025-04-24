@@ -377,8 +377,8 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
         print(f"Error processing data: {e}")
         return None
 
-    
     dataframe = dataframe[dataframe['dlc'] == 8].reset_index(drop=True)
+    dataframe['timestamp'] = dataframe['timestamp'] - dataframe['timestamp'].min()
 
     # Print the count of anomalies
     if phase == 'test':
@@ -696,3 +696,296 @@ def convert_to_tensorflow(featureframe, labels=None, batch_size=32, window_size=
     print(f"Feature shape AFTER sliding window: {input_data.shape}")
     print(f"Successfully prepared model input data.")
     return model_input
+
+
+######################################
+
+def feature_selection_preparation_new(file_name, phase ,pre_dataframe = None, rows = None, binary = False, binary_id = True, embedding_model = None, id_to_embedding = None, scalers = None):
+    start_time = time.time()
+    print("#############START#####################")
+
+    column_names_train = ['timestamp' , 'arbitration_id' , 'channel' , 'dlc', 'data' , 'ecu']
+    column_names_test = ['timestamp', 'arbitration_id', 'dlc', 'data']
+    # Define consistent dtypes for all phases
+    # First check original file data types (read a few rows)
+    """
+    print(f"Checking original data types in {file_name}...")
+    try:
+        sample_df = pd.read_csv(file_name, nrows=1)
+        #print("Original inferred data types:")
+        #for col in sample_df.columns:
+        #    print(f"  {col}: {sample_df[col].dtype}")
+
+        # To see the actual value format
+        print("\nSample values for each column:")
+        for col in sample_df.columns:
+            print(f"  {col}: {sample_df[col].iloc[0]} (type: {type(sample_df[col].iloc[0]).__name__})")
+    except Exception as e:
+        print(f"Error sampling file: {e}")
+    """
+    dtypes_train = {
+        'timestamp': float,
+        'arbitration_id': int,
+        'channel': int,
+        'dlc': int,
+        'data': str,
+        'ecu': str
+    }
+
+    dtypes_test = {
+        'timestamp': float,
+        'arbitration_id': int,
+        'dlc': int,
+        'data': str,
+        'type': str
+    }
+
+    try:
+        if phase == 'training':
+            dataframe = pd.read_csv(
+                file_name, 
+                header=0, 
+                names=column_names_train, 
+                nrows=rows, 
+                dtype=dtypes_train
+            )
+            
+        elif phase == 'debug':
+            dataframe = pre_dataframe
+            
+        elif phase == 'test':
+            # Read the CSV with consistent dtypes
+            dataframe = pd.read_csv(
+                file_name, 
+                header=0, 
+                names=column_names_test + ['type'], 
+                nrows=rows, 
+                dtype=dtypes_test
+            )
+            
+            # Explicitly convert arbitration_id to integers
+            # First handle any potential NaN values
+            dataframe['arbitration_id'] = dataframe['arbitration_id'].fillna(0)
+            # Then convert to integers
+            dataframe['arbitration_id'] = dataframe['arbitration_id'].astype(int)
+
+            # Create a copy before modifying to avoid SettingWithCopyWarning
+            dataframe = dataframe.copy()
+            
+            # Count types before processing for debugging
+            print(f"Raw type values: {dataframe['type'].unique()}")
+            
+            # Replace missing values with a consistent value before conversion
+            dataframe['type'] = dataframe['type'].fillna('unknown')
+            
+            # Explicitly convert only 'R' to 0 and everything else to 1
+            dataframe['type'] = dataframe['type'].apply(lambda x: 0 if x == 'R' else 1)
+            
+        else:
+            print("Invalid phase")
+            return None
+            
+        
+    except Exception as e:
+        print(f"Error processing data: {e}")
+        return None
+
+    
+    dataframe = dataframe[dataframe['dlc'] == 8].reset_index(drop=True)
+
+    # Print the count of anomalies
+    if phase == 'test':
+        count_of_ones = dataframe['type'].sum()
+        count_of_zeros = len(dataframe) - count_of_ones
+        print(f"Normal entries in 'type' column : {count_of_zeros}")
+        print(f"Anomalies in 'type' column: {count_of_ones}")
+
+    ############# Extract data to indiviual bits or normalized integers ########################
+
+    # Extract data to normalized integers 
+    if not binary: 
+        data_columns = [f'data[{i}]' for i in range(8)]
+        dataframe[data_columns] = dataframe['data'].str.split(' ', expand=True).iloc[:, :8]
+        
+        # Convert Data from Hexadecimal to Integers [0,255]
+        for col in data_columns:
+            dataframe[col] = dataframe[col].apply(lambda x: int(x, 16) if isinstance(x, str) else x)
+
+    # Extract data to bits        
+    else:
+        data_columns = [f'data[{i}]' for i in range(8)]
+        dataframe[data_columns] = dataframe['data'].str.split(' ', expand=True).iloc[:, :8]
+
+        # Converts each byte (hex value) to individual bits
+        bit_columns = []
+        for col in data_columns:
+            # First convert hex to binary string
+            dataframe[col] = dataframe[col].apply(lambda x: bin(int(x, 16))[2:].zfill(8) if isinstance(x, str) else x)
+            
+            # Binary string into individual bits
+            for bit_pos in range(8):
+                bit_col_name = f'{col}_data_bit_{bit_pos}'
+                dataframe[bit_col_name] = dataframe[col].apply(lambda x: int(x[bit_pos]) if isinstance(x, str) and len(x) > bit_pos else None)
+                bit_columns.append(bit_col_name)
+    
+
+    #######################################################################  
+    # Entropy feature
+    if not binary:
+        dataframe['payload_entropy'] = dataframe.apply(calculate_entropy, axis=1)    
+
+    ############# Extract Arbitration ID to Individual Bits or Embeddings ########################
+
+    unique_ids_amount = dataframe['arbitration_id'].nunique()
+    print(f"Amount of unique IDS in {phase}: "
+    f"{unique_ids_amount}")
+
+    if binary_id:
+        num_bits = 29  # Standard for CAN IDs
+        binary_encoded_ids = binary_encode_integers(dataframe['arbitration_id'].tolist(), num_bits)
+        binary_encoded_df = pd.DataFrame(binary_encoded_ids, columns=[f'bit_{i}' for i in range(num_bits)])
+
+        # Add binary-encoded IDs to the original DataFrame
+        dataframe = pd.concat([binary_encoded_df, dataframe], axis=1)
+
+        # Extract all columns at once as NumPy arrays
+        bit_cols = dataframe[[f'bit_{i}' for i in range(num_bits)]].to_numpy()
+
+    #elif phase == 'training' and not binary_id: 
+    elif  id_to_embedding is None and not binary_id: 
+        embedding_dim = int(np.ceil(np.sqrt(unique_ids_amount)))
+
+        unique_arbitration_ids = dataframe['arbitration_id'].unique()
+        id_embeddings , embedding_model = train_embedding(unique_ids = unique_arbitration_ids,num_unique_ids= unique_ids_amount, labels= None, num_epochs= 100, embedding_dim= embedding_dim)
+
+        # Create a default embedding (e.g., a zero vector)
+        default_embedding = np.full(embedding_dim, -5)
+        
+        # Create a defaultdict with a default value (default_embedding)
+        id_to_embedding = defaultdict(lambda: default_embedding, 
+                                    {id: embedding for id, embedding in zip(unique_arbitration_ids, id_embeddings)})
+        
+        # Add embeddings to the DataFrame based on arbitration_id
+        dataframe[[f'id_embed{i}' for i in range(embedding_dim)]] = dataframe['arbitration_id'].map(id_to_embedding).tolist()
+        
+        # Optional: verify the columns were added correctly
+        bit_cols = dataframe[[f'id_embed{i}' for i in range(embedding_dim)]].to_numpy()
+        
+    else:
+        # Extract embedding dimension from first entry in id_to_embedding
+        first_item = next(iter(id_to_embedding.items()))
+        embedding_dim = len(first_item[1])  # Get embedding size
+
+        default_embedding = np.zeros(embedding_dim)
+
+
+        # Add embeddings to the DataFrame based on arbitration_id
+        dataframe[[f'id_embed{i}' for i in range(embedding_dim)]] = dataframe['arbitration_id'].map(id_to_embedding).tolist()
+        
+        # Optional: verify the columns were added correctly
+        bit_cols = dataframe[[f'id_embed{i}' for i in range(embedding_dim)]].to_numpy()
+
+
+    #######################################################################  
+
+    # Compute Temporal Features and Normalize
+    if not binary: 
+        dataframe = compute_temporal_features(dataframe)
+        #if phase == "training": 
+        if scalers is None:
+            scalers = {}
+            z_scaler_data_features = StandardScaler()
+            # Apply Z-score normalization using StandardScaler
+            z_scaler_temporal_features = StandardScaler()
+
+            temporal_feature_columns = [
+                "msg_frequency",
+                "entropy_average",
+                "entropy_bit_change",
+                "entropy_id",
+                "entropy_id_std",
+                "timestamp",
+                "payload_entropy"
+            ]
+
+            dataframe[temporal_feature_columns] = z_scaler_temporal_features.fit_transform(dataframe[temporal_feature_columns])
+            dataframe[data_columns] = z_scaler_data_features.fit_transform(dataframe[data_columns])
+
+            scalers['temporal_feature_scaler'] = z_scaler_temporal_features
+            scalers['data_scaler'] = z_scaler_data_features
+
+        else:
+
+            z_scaler_temporal_features = scalers['temporal_feature_scaler'] 
+            z_scaler_data_features = scalers['data_scaler'] 
+
+            temporal_feature_columns = [
+                "msg_frequency",
+                "entropy_average",
+                "entropy_bit_change",
+                "entropy_id",
+                "entropy_id_std",
+                "timestamp",
+                "payload_entropy"
+            ]
+
+
+            dataframe[temporal_feature_columns] = z_scaler_temporal_features.transform(dataframe[temporal_feature_columns])
+            dataframe[data_columns] = z_scaler_data_features.transform(dataframe[data_columns])
+
+
+            
+
+        #### Min-Max Scaler ###
+        """
+        dataframe[data_columns] = scaler.fit_transform(dataframe[data_columns])
+        dataframe['timestamp'] = scaler.fit_transform(dataframe[['timestamp']])
+        dataframe['payload_entropy'] = scaler.fit_transform(dataframe[['payload_entropy']])
+        """
+
+        #### Z-Score Scaler ###
+        #dataframe[data_columns] = z_scaler.fit_transform(dataframe[data_columns])
+        #dataframe['timestamp'] = z_scaler.fit_transform(dataframe[['timestamp']])
+        #dataframe['payload_entropy'] = z_scaler.fit_transform(dataframe[['payload_entropy']]) # return scaler and use same on test
+
+
+
+    # Concatenate along axis=1
+    if not binary: 
+        data_cols = dataframe[data_columns].to_numpy()
+        extra_cols = dataframe[['msg_frequency', 'timestamp', 'payload_entropy',
+                            'entropy_average', 'entropy_id', 'entropy_id_std']].to_numpy()
+        dataframe['features'] = list(np.hstack([bit_cols, data_cols, extra_cols]))
+        #dataframe['features'] = list(np.hstack([data_cols, extra_cols]))
+        #dataframe['features'] = list(extra_cols)
+    else:
+        # Step 3: Collect bit-wise columns and store as a list
+        bit_data_cols = [col for col in dataframe.columns if '_data_bit_' in col]
+        data_cols = dataframe[bit_data_cols].to_numpy()
+        dataframe['features'] = list(np.hstack([bit_cols, data_cols]))
+     
+        #[row[[f'bit_{i}' for i in range(num_bits)]].values,  # Binary data columns 0 to 28
+        # row[data_columns].values,  # Other data columns 28 to 36
+        #np.array([row['msg_frequency'],row['timestamp'],row['payload_entropy'],row['entropy_average'], row['entropy_bit_change']
+        #          , row['entropy_id'], row['entropy_id_std'], row['entropy_id_z_score']])  # Additional features
+        #]), axis=1)
+
+       
+    nan_counts = dataframe.isna().sum()
+    if nan_counts.any():
+        print("NaN values found:\n", nan_counts[nan_counts > 0])
+
+        # Identify and print the rows with NaN values
+        nan_rows = dataframe[dataframe.isna().any(axis=1)]
+        print("\nRows containing NaN values:\n", nan_rows)
+    
+    if np.any(np.isinf(dataframe.select_dtypes(include=[np.number]))):
+        print("Dataframe includes INF values")
+    print(f"Feature Selection completed in {time.time() - start_time:.2f} seconds")
+
+    #if phase == 'test':
+    if not train_embedding_model:   
+        print("returning only df")   
+        return dataframe
+    
+    return dataframe, embedding_model, id_to_embedding, scalers

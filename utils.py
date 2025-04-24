@@ -423,6 +423,15 @@ def check_dataset(dataset, dataset_name="Dataset"):
     
     for batch in dataset:
         # Convert TensorFlow tensors to NumPy
+        try:
+            batch, labels = batch
+            #print("label shape" , labels.shape)
+
+        except ValueError:
+            #print("Labels is None")
+            batch = batch
+            labels = None
+
         batch_np = batch.numpy() if isinstance(batch, tf.Tensor) else np.array(batch)
         
         # Flatten batch and store values
