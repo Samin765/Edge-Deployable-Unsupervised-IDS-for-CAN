@@ -234,7 +234,8 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
 
             if latent_AD:
 
-                distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
+                #distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
+                distance = min_euclidean_distance(mean_train, mu[i])
                 if debug < 200:
 
                     print("Distance from val" , distance)
@@ -315,16 +316,25 @@ def get_threshold_from_test(model_path, train_dataset, val_dataset, reconstructi
     debug = 0
     for batch, labels in val_dataset:
 
-        model_outputs = load_vae(batch, n_samples=n_samples, latent_only = not reconstruction_AD)  
+        model_outputs = load_vae(batch, labels,n_samples=n_samples, latent_only = not reconstruction_AD)  
 
         reconstructed = model_outputs['reconstructed']
         mu = model_outputs['mu']
         logvar = model_outputs['logvar']
+        hidden = model_outputs['hidden']
+        y_pred = model_outputs['y_pred']
 
         if reconstruction_AD:
             
-            mean_reconstruction_error = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
+            recon_loss_batch = compute_loss_continous(reconstructed, batch,None,None,None,AD = True)
+            losses = load_vae.compute_loss(labels, recon_loss_batch , hidden , y_pred, AD = True)
+
             reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+            classification_loss = losses['classification_loss']
+            masked_recon_loss_batch = losses['masked_recon_loss']
+            kappa = losses['kappa']
+
+            mean_reconstruction_error = masked_recon_loss_batch
 
         batch_data = batch.numpy()  
         for i in range(len(batch_data)):
@@ -432,7 +442,8 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
 
             if latent_AD:
 
-                distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
+                #distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
+                distance = min_euclidean_distance(mean_train, mu[i])
 
                 #combined_anomaly = np.hstack([mu[i], np.exp(logvar[i])])
                 #distances_tree, _ = tree.query([combined_anomaly], k=1)  # Find nearest neighbor
@@ -476,7 +487,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
             copy_results_errors[i] = np.append(results[i], anomaly_label)   
 
             reconstruction_prob = results_probs[i][-1] 
-            anomaly_label = 1 if reconstruction_prob > reconstruction_probability_threshold else 0  
+            anomaly_label = 1 if reconstruction_prob > 37.5 else 0  
             copy_results_probs[i] = np.append(results_probs[i], anomaly_label)  
 
         # Print summary
@@ -555,7 +566,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
         # Look if distances is over normal threshold
         for i in range(len(distances)):
             latent_distance = distances[i][-1] 
-            anomaly_label = 1 if latent_distance < 0.0009 else 0  
+            anomaly_label = 1 if latent_distance > latent_normal_threshold else 0  
             copy_distances[i] = np.append(distances[i], anomaly_label)  
 
         # Print summary
@@ -689,6 +700,27 @@ def bhattacharyya_distance_old_balltree(x, y):
     return distances
 
 
+def min_euclidean_distance(mean_list, test_mean):
+    """
+    Compute the minimum Euclidean distance between a test mean vector
+    and a list/array of mean vectors.
+    
+    Parameters:
+    - mean_list: np.ndarray of shape (N, D), where N is the number of mean vectors
+    - test_mean: np.ndarray of shape (D,)
+    
+    Returns:
+    - min_distance: float, the smallest Euclidean distance found
+    """
+    mean_list = np.asarray(mean_list)
+    test_mean = np.asarray(test_mean)
+    
+    # Compute Euclidean distances
+    distances = np.linalg.norm(mean_list - test_mean, axis=1)
+    
+    # Return the minimum distance
+    return np.min(distances[distances > 0])
+
 def gaussian_distance(mean1, var1, mean2, var2):
     """
     Calculate Wasserstein-2 distance between Gaussians
@@ -702,6 +734,12 @@ def gaussian_distance(mean1, var1, mean2, var2):
     
     return np.sqrt(mean_diff + var_diff)
 
+
+def euclidean_distance(mean1, mean2):
+    """
+    Calculate Euclidean distance between two mean vectors.
+    """
+    return np.linalg.norm(mean1 - mean2)
 
 def mahalanobis_distance(mu_normals, logvar_normals, mu_anomaly, logvar_anomaly):
     # Convert log-variance to actual variance

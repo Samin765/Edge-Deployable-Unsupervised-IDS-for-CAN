@@ -700,7 +700,7 @@ def convert_to_tensorflow(featureframe, labels=None, batch_size=32, window_size=
 
 ######################################
 
-def feature_selection_preparation_new(file_name, phase ,pre_dataframe = None, rows = None, binary = False, binary_id = True, embedding_model = None, id_to_embedding = None, scalers = None):
+def feature_selection_preparation_new(file_name, phase ,pre_dataframe = None, rows = None, binary = False, binary_id = True, embedding_model = None, id_to_embedding = None, scalers = None, train_embedding_scaler = False):
     start_time = time.time()
     print("#############START#####################")
 
@@ -792,6 +792,7 @@ def feature_selection_preparation_new(file_name, phase ,pre_dataframe = None, ro
 
     
     dataframe = dataframe[dataframe['dlc'] == 8].reset_index(drop=True)
+    dataframe['timestamp'] = dataframe['timestamp'] - dataframe['timestamp'].min()
 
     # Print the count of anomalies
     if phase == 'test':
@@ -984,7 +985,7 @@ def feature_selection_preparation_new(file_name, phase ,pre_dataframe = None, ro
     print(f"Feature Selection completed in {time.time() - start_time:.2f} seconds")
 
     #if phase == 'test':
-    if not train_embedding_model:   
+    if not train_embedding_scaler:   
         print("returning only df")   
         return dataframe
     
