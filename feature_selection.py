@@ -470,6 +470,7 @@ def feature_selection_preparation(file_name, phase ,pre_dataframe = None, rows =
         # Optional: verify the columns were added correctly
         bit_cols = dataframe[[f'id_embed{i}' for i in range(embedding_dim)]].to_numpy()
 
+    
 
     #######################################################################  
 

@@ -566,7 +566,7 @@ def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, result
         # Look if distances is over normal threshold
         for i in range(len(distances)):
             latent_distance = distances[i][-1] 
-            anomaly_label = 1 if latent_distance > latent_normal_threshold else 0  
+            anomaly_label = 1 if latent_distance > 0.3 else 0  
             copy_distances[i] = np.append(distances[i], anomaly_label)  
 
         # Print summary

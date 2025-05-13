@@ -27,12 +27,9 @@ def prepare_features(means_list, variances_list):
         tuple: (scaled_features, scaler)
     """
     # Combine mean and variance features
-    features = np.hstack((means_list, variances_list))
+    #features = np.hstack((means_list, variances_list))
+    features = np.array(means_list)
     
-    # Log transform variances (optional but often helpful as variances can be skewed)
-    # Adding a small constant to avoid log(0)
-    #features[:, means_list.shape[1]:] = np.log(features[:, means_list.shape[1]:] + 1e-10)
-    #features[:, means_list.shape[1]:] = np.log(features[:, means_list.shape[1]:] + 1 + 1e-10)
     # Scale the features
     scaler = StandardScaler()
     #scaled_features = scaler.fit_transform(features)
@@ -418,6 +415,133 @@ def evaluate_anomaly_detector(anomaly_scores, true_labels, model_name="Model"):
     print(f"{model_name} Precision: {precision}")
     print(f"{model_name} Recall: {recall}")
     print(f"{model_name} PR AUC: {pr_auc:.4f}")
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve, auc, confusion_matrix, f1_score, average_precision_score
+
+def evaluate_anomaly_detector_verbose(anomaly_scores, true_labels, model_name="Model", threshold=None):
+    """
+    Evaluate clustering/anomaly detection results with proper metrics
+    
+    Parameters:
+    - true_labels: Binary labels (0 for normal, 1 for anomaly/cluster)
+    - anomaly_scores: Anomaly scores from your algorithm
+    - model_name: Name of the model for plotting
+    - threshold: Threshold for classification. If None, use the optimal F1 threshold
+    
+    Returns:
+    - Dictionary of evaluation metrics
+    """
+    # Calculate PR curve and AUC
+    precision, recall, thresholds = precision_recall_curve(true_labels, anomaly_scores)
+    pr_auc = auc(recall, precision)
+    average_precision = average_precision_score(true_labels, anomaly_scores)
+    
+    # Find optimal threshold based on F1 score if not provided
+    if threshold is None:
+        f1_scores = 2 * precision * recall / (precision + recall + 1e-10)
+        optimal_idx = np.argmax(f1_scores)
+        threshold = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
+    
+    # Get binary predictions using the threshold
+    predictions = (anomaly_scores >= threshold).astype(int)
+    
+    # Calculate metrics at the chosen threshold
+    tn, fp, fn, tp = confusion_matrix(true_labels, predictions).ravel()
+    precision_at_threshold = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall_at_threshold = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = f1_score(true_labels, predictions)
+    
+    # Calculate class imbalance
+    anomaly_ratio = np.mean(true_labels)
+    
+    # Plot curves
+    plt.figure(figsize=(15, 5))
+    
+    # Plot PR curve
+    plt.subplot(1, 3, 1)
+    plt.plot(recall, precision, label=f'PR (AP = {average_precision:.3f})')
+    plt.scatter(recall_at_threshold, precision_at_threshold, color='red', 
+                label=f'Threshold = {threshold:.3f}')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve')
+    plt.legend(loc='best')
+
+    # Add this right before plotting
+    print("Normal class stats:", {
+        'min': np.min(anomaly_scores[true_labels==0]), 
+        'max': np.max(anomaly_scores[true_labels==0]),
+        'mean': np.mean(anomaly_scores[true_labels==0]), 
+        'std': np.std(anomaly_scores[true_labels==0])
+    })
+
+    print("Anomaly class stats:", {
+        'min': np.min(anomaly_scores[true_labels==1]), 
+        'max': np.max(anomaly_scores[true_labels==1]),
+        'mean': np.mean(anomaly_scores[true_labels==1]), 
+        'std': np.std(anomaly_scores[true_labels==1])
+    })
+    
+    # Plot score distributions
+    plt.subplot(1, 3, 2)
+    plt.hist(anomaly_scores[true_labels==0], bins=50, alpha=0.5, label='Normal')
+    plt.hist(anomaly_scores[true_labels==1], bins=50, alpha=0.5, label='Anomaly')
+    plt.axvline(threshold, color='red', linestyle='--', label=f'Threshold = {threshold:.3f}')
+    plt.xlabel('Anomaly Score')
+    plt.ylabel('Count')
+    plt.title('Score Distribution')
+    plt.legend(loc='best')
+    
+    # Plot confusion matrix
+    plt.subplot(1, 3, 3)
+    cm = np.array([[tn, fp], [fn, tp]])
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title('Confusion Matrix')
+    plt.colorbar()
+    tick_marks = np.arange(2)
+    plt.xticks(tick_marks, ['Normal', 'Anomaly'])
+    plt.yticks(tick_marks, ['Normal', 'Anomaly'])
+    
+    # Add text annotations to confusion matrix
+    thresh = cm.max() / 2
+    for i in range(2):
+        for j in range(2):
+            plt.text(j, i, format(cm[i, j], 'd'),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary
+    print(f"\n----- {model_name} Evaluation Summary -----")
+    print(f"Class imbalance: {anomaly_ratio:.2%} anomalies")
+    print(f"Precision-Recall AUC: {pr_auc:.4f}")
+    print(f"Average Precision Score: {average_precision:.4f}")
+    print(f"At threshold {threshold:.4f}:")
+    print(f"  Precision: {precision_at_threshold:.4f}")
+    print(f"  Recall: {recall_at_threshold:.4f}")
+    print(f"  F1 Score: {f1:.4f}")
+    print(f"  True Positives: {tp}, False Positives: {fp}")
+    print(f"  True Negatives: {tn}, False Negatives: {fn}")
+    
+    return {
+        'threshold': threshold,
+        'precision': precision_at_threshold,
+        'recall': recall_at_threshold,
+        'f1': f1,
+        'pr_auc': pr_auc,
+        'average_precision': average_precision,
+        'confusion_matrix': cm
+    }
+
+# Example usage:
+# true_labels = # your ground truth labels (0 for normal, 1 for anomaly)
+# anomaly_scores = # your model's anomaly scores
+# metrics = evaluate_clustering(true_labels, anomaly_scores, model_name="IsolationForest")
 
 def evaluate_hdbscan_detector(true_labels, predicted_anomalies):
     """
