@@ -133,6 +133,7 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
         ) 
     train_losses = []
     val_losses = []
+    decoder_memory = []
     best_val_loss = float('inf')
     real_epochs = 0
 
@@ -140,6 +141,8 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
     for epoch in range(epochs):
         real_epochs += 1
         epoch_loss = 0
+        epoch_decoder_memory = 0
+        epoch_encoder_memory = 0
 
         for step, batch in enumerate(train_dataset): # window size , features
             global_step = epoch * len(train_dataset) + step  # Total training step count
@@ -153,6 +156,8 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
                 reconstructed = model_outputs['reconstructed']
                 mu = model_outputs['mu']
                 logvar = model_outputs['logvar']
+                encoder_memory_batch = model_outputs['encoder_memory']
+                decoder_memory_batch = model_outputs['decoder_memory']
 
                 #print(reconstructed)
                 loss = compute_loss_continous(reconstructed, batch, mu, logvar, beta)
@@ -162,6 +167,8 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
             optimizer.apply_gradients(zip(gradients, vae.trainable_variables))
 
             epoch_loss += loss.numpy()
+            epoch_encoder_memory += encoder_memory_batch
+            epoch_decoder_memory += decoder_memory_batch
 
         # VALIDATION
         epoch_val_loss = 0
@@ -192,13 +199,17 @@ def train_model(vae,optimizer,discriminator_optimizer, epochs, n_samples, input_
         # Store the loss for this epoch
         train_loss = epoch_loss / len(train_dataset)
         val_loss = epoch_val_loss / len(val_dataset) 
-
+        encoder_memory = epoch_encoder_memory / len(train_dataset)
+        decoder_memory = epoch_decoder_memory / len(train_dataset)
         train_losses.append(train_loss)
         val_losses.append(val_loss)
 
 
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.6f}, "
             f"Val Loss: {val_loss:.6f}")
+        
+
+        print(f"Encoder Memory: {encoder_memory}, Decoder Memory: {decoder_memory}, ")
         
         if early_stop:
             # Early stopping check

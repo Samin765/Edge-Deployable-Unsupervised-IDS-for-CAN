@@ -591,7 +591,7 @@ def create_sliding_windows(data, labels=None, window_size=5, stride=1, anomaly_w
             window = labels[i:i+window_size]
             # Check if there is at least one '1' in the window
             amount_anomaly = np.sum(window == 1) 
-            print("Window Anomaly Amount ", amount_anomaly)
+           # print("Window Anomaly Amount ", amount_anomaly)
             #print(f"index: {i} and {i + window_size}")
             if amount_anomaly > max_anomaly:
                 max_anomaly = amount_anomaly

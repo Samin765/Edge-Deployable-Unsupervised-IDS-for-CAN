@@ -17,6 +17,36 @@ from hdbscan.prediction import approximate_predict
 from sklearn.manifold import TSNE
 from train import compute_loss_binary, compute_loss_continous, compute_loss_binary_continous
 
+import psutil
+import os
+import gc
+
+# Memory measurement function
+def measure_memory_usage2(func, *args, **kwargs):
+    process = psutil.Process(os.getpid())
+    
+    # Trigger garbage collection before measurement
+    gc.collect()
+
+    mem_before = process.memory_info().rss  # Memory before running the function
+    
+    result = func(*args, **kwargs)  # Run the function
+
+    mem_after = process.memory_info().rss  # Memory after the function has run
+
+    # Convert bytes to MB
+    mem_used = (mem_after - mem_before) / 1024 / 1024
+    return mem_used, result
+
+import tracemalloc
+
+def measure_memory_usage(func, *args, **kwargs):
+    tracemalloc.start()
+    result = func(*args, **kwargs)
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    return peak / (1024 * 1024), result  # peak memory in MB
+
 
 
 """
@@ -148,6 +178,7 @@ def get_mean_variances(dataset, test = False, load_vae = None, model_path = ""):
 
             mu = model_outputs['mu']
             logvar = model_outputs['logvar']
+
             
             for i in range(len(batch)):
                 mean_train.append(mu[i])
@@ -202,8 +233,9 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
 
         # Preprocess your normal data
         start_time_ball_tree = time.time()
-        combined_params = np.hstack([mean_train, variance_train])  # Combine mean and variance
-        tree = BallTree(combined_params, metric='pyfunc', func=bhattacharyya_distance_old_balltree)
+        #combined_params = np.hstack([mean_train, variance_train])  # Combine mean and variance
+        #tree = BallTree(mean_train, metric='pyfunc', func=bhattacharyya_distance_old_balltree)
+        tree = BallTree(mean_train, metric='euclidean')
         print(f"Ball Tree completed in {time.time() - start_time_ball_tree:.4f} seconds")
 
     debug = 0
@@ -224,7 +256,7 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
         for i in range(len(batch_data)):
             if reconstruction_AD: 
 
-                if debug < 200:
+                if debug < 200 and False:
 
                     print("recon error from val" , mean_reconstruction_error[i].numpy().item())
                     debug += 1
@@ -236,7 +268,7 @@ def get_threshold_from_train(model_path, train_dataset, val_dataset, reconstruct
 
                 #distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
                 distance = min_euclidean_distance(mean_train, mu[i])
-                if debug < 200:
+                if debug < 200 and False:
 
                     print("Distance from val" , distance)
                     debug += 1
@@ -398,8 +430,15 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
     start_time = time.time()
     #load_vae = keras.models.load_model(model_path)
     #load_vae.trainable = False  # Freeze model weights
-
+    reconstruction_memory = 0
+    latent_memory = 0
     n_samples = 10  # Number of latent samples during inference
+
+    normal_rec = []
+    attack_rec = []
+
+    normal_lat = []
+    attack_lat = []
 
     results = []
     results_probs = []
@@ -414,11 +453,31 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
         reconstructed = model_outputs['reconstructed']
         mu = model_outputs['mu']
         logvar = model_outputs['logvar']
+        encoder_memory = model_outputs['encoder_memory']
+        if reconstruction_AD:
+            decoder_memory = model_outputs['decoder_memory']
+
         # Compute reconstruction errors (mean over all features)
         if reconstruction_AD:
             
-            mean_reconstruction_error = compute_loss_continous(reconstructed,batch,None,None,None,AD = True)
-            reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+            #mean_reconstruction_error = compute_loss_continous(reconstructed,batch,None,None,None,AD = True)
+            #reconstruction_probabilties = compute_probability_continous(reconstructed,batch)
+
+            # Track memory for loss
+            loss_mem, mean_reconstruction_error = measure_memory_usage(
+                compute_loss_continous, reconstructed, batch, None, None, None, AD=True
+            )
+            #print(f"Loss Memory (MB): {loss_mem:.8f}")
+            reconstruction_memory+= loss_mem
+
+            # Track memory for probability
+            prob_mem, reconstruction_probabilties = measure_memory_usage(
+                compute_probability_continous, reconstructed, batch
+            )
+            print(f"Probability Memory (MB): {prob_mem:.8f}")
+
+            distances_batch, indices_batch = tree.query(mu, k=1)
+            distances = distances_batch.flatten()  # Get 1D array of distances
 
         batch_data = batch.numpy()  # Convert Tensor to NumPy
         for i in range(len(batch_data)):
@@ -427,14 +486,18 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
 
                 results.append(np.append(label[i], mean_reconstruction_error[i].numpy().item()))  # Store the label and max error per sample
                 results_probs.append(np.append(label[i], reconstruction_probabilties[i].numpy().item())) 
+                if label[i] == 0:
+                    normal_rec.append(mean_reconstruction_error[i].numpy().item())
+                else:
+                    attack_rec.append(mean_reconstruction_error[i].numpy().item())
 
-                if label[i] == 0 and debug < 1000:
+                if label[i] == 0 and debug < 1000 and False:
 
                     print("Normal reconstruction: ", mean_reconstruction_error[i].numpy().item())
                     print("Normal Probability: ", reconstruction_probabilties[i].numpy().item())
                     debug +=1  
 
-                if label[i] == 1 and debug < 2000:
+                if label[i] == 1 and debug < 2000 and False:
 
                     print("Attack reconstruction: ", mean_reconstruction_error[i].numpy().item())
                     print("Attack Probability: ", reconstruction_probabilties[i].numpy().item())
@@ -443,29 +506,73 @@ def anomaly_detection(load_vae,test_dataset, reconstruction_AD, latent_AD, mean_
             if latent_AD:
 
                 #distance = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
-                distance = min_euclidean_distance(mean_train, mu[i])
+                #distance = min_euclidean_distance(mean_train, mu[i])
 
+                #dist_mem, distance = measure_memory_usage(min_euclidean_distance, mean_train, mu[i])
+                #latent_memory += dist_mem
+
+                
+                #print(f"Euclidean Distance Memory (MB): {dist_mem:.8f}")
                 #combined_anomaly = np.hstack([mu[i], np.exp(logvar[i])])
                 #distances_tree, _ = tree.query([combined_anomaly], k=1)  # Find nearest neighbor
                 #distance = distances_tree[0][0]
+                
                 distances.append(np.append(label[i], distance))
+                if label[i] == 0:
+                    normal_lat.append(distance)
+                else:
+                    attack_lat.append(distance)
 
-                if label[i] == 0 and debug < 200:
+                if label[i] == 0 and debug < 200 and False:
 
                     #distance_manual = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
                     #print("Manual Normal Latent ", distance_manual)
                     print("Normal Latent ", distance)
                     debug +=1 
 
-                if label[i] == 1 and debug < 400:
+                if label[i] == 1 and debug < 400 and False:
 
                     #distance_manual = bhattacharyya_distance_old(mean_train, variance_train, mu[i], np.exp(logvar[i]))
                     #print("Manual Attack Latent ", distance_manual)
                     print("Attack latent: ", distance)
                     debug +=1
 
+
+    # Example: Plot overlapping histograms for comparison
+    plt.figure(figsize=(10, 6))
+    plt.hist(normal_lat, bins=50, alpha=0.6, label='Normal', color='blue', density=True)
+    plt.hist(attack_lat, bins=50, alpha=0.6, label='Attack', color='red', density=True)
+
+    plt.title('Overlap Between Normal and Attack Latent Distances')
+    plt.xlabel('Distance')
+    plt.ylabel('Density')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(normal_rec, bins=50, alpha=0.6, label='Normal', color='blue', density=True)
+    plt.hist(attack_rec, bins=50, alpha=0.6, label='Attack', color='red', density=True)
+
+    plt.title('Overlap Between Normal and Attack Reconstruction Error')
+    plt.xlabel('Error')
+    plt.ylabel('Density')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
     print(f"Anomaly Detection completed in : {time.time() - start_time:.4f} seconds")
-    return results, results_probs, distances
+    print(f"Recon memory: { reconstruction_memory:.8f}")
+    print(f"Latent memory: { latent_memory:.8f}")
+
+    errors_dict = {
+        "normal_rec": normal_rec,
+        "attack_rec": attack_rec,
+        "normal_lat": normal_lat,
+        "attack_lat": attack_lat
+    }
+
+    return results, results_probs, distances, errors_dict
  
 
 def get_anomaly_detection_accuracy(reconstruction_AD, latent_AD, results, results_probs, reconstruction_normal_threshold, reconstruction_probability_threshold, distances,latent_normal_threshold, 
